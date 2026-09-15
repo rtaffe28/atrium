@@ -21,11 +21,21 @@ to become their own session, resizable splitters, Escape-to-interrupt,
 window, behind one injected object with a capability matrix. `MockHost` runs in
 a browser tab and stays a supported target. See `06-host-interface.md`.
 
-### Stage 2 — see a real PTY, outside this project
+### ✅ Stage 2 — see a real PTY, outside this project
 
-Thirty lines of Node in a scratch directory: `npm i node-pty`, spawn `zsh`,
-print raw output, write `"ls\n"` into it. The goal is to watch escape codes
-flow, not to build anything.
+Done, in `../pty-lab` — deliberately a separate repo. `01-hello-pty.mjs` spawns
+a shell on a PTY and prints every chunk with control bytes made visible. Its
+README records what the output proves: the shell believes it is on a tty,
+SIGWINCH really resizes it, output arrives in arbitrary chunks that split
+escape sequences mid-sequence, and your own keystrokes echo back through the
+same loop.
+
+**Carry this one forward:** node-pty's prebuilt `spawn-helper` arrives without
+its execute bit, because npm's tarball extraction drops it, and every spawn
+then fails with a bare `posix_spawnp failed` that looks like a code bug. The
+tell is that `/bin/echo` fails identically. `pty-lab` fixes it on postinstall.
+Expect the same class of problem at stage 6 — native helpers have to keep
+their permissions through asar packing and code signing.
 
 ### Stage 3 — a real terminal in a browser tab
 
