@@ -15,6 +15,12 @@ to become their own session, resizable splitters, Escape-to-interrupt,
 `×`-to-kill, and system notifications with synthesised sounds. See
 `05-ui-model.md`.
 
+### ✅ Stage 1.5 — define the host interface
+
+`Host` replaces the session-only seam: sessions, surfaces, git, files, notify,
+window, behind one injected object with a capability matrix. `MockHost` runs in
+a browser tab and stays a supported target. See `06-host-interface.md`.
+
 ### Stage 2 — see a real PTY, outside this project
 
 Thirty lines of Node in a scratch directory: `npm i node-pty`, spawn `zsh`,
@@ -34,8 +40,9 @@ means something.
 
 ### Stage 5 — `NodePtyDriver` in Atrium
 
-Implement `SessionDriver` against node-pty and swap the one line in `App.tsx`.
-Nothing above the seam should change. If it does, the seam was wrong.
+Implement `SessionDriver` against node-pty inside an `ElectronHost`, and swap
+the one line in `App.tsx`. Nothing above the seam should change. If it does,
+the seam was wrong — and `src/host/host.test.tsx` should catch it.
 
 ### Stage 6 — wrap in Electron
 

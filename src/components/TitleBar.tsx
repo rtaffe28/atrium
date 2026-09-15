@@ -1,3 +1,4 @@
+import { useHost } from '../host/context';
 import type { Session } from '../session/types';
 
 /**
@@ -11,16 +12,11 @@ import type { Session } from '../session/types';
  * Getting this wrong is the single most reliable way to make a cross-platform
  * app feel wrong, so it is a real component from day one rather than a
  * retrofit.
+ *
+ * Both the platform and the inset sizes come from the host. A browser tab has
+ * no window controls to avoid and reports zero; a frameless Electron window
+ * reports the real numbers. The component never sniffs a user agent.
  */
-
-type Platform = 'mac' | 'win' | 'linux';
-
-function detectPlatform(): Platform {
-  const ua = navigator.userAgent;
-  if (ua.includes('Mac')) return 'mac';
-  if (ua.includes('Win')) return 'win';
-  return 'linux';
-}
 
 interface Props {
   session: Session | null;
@@ -29,10 +25,20 @@ interface Props {
 }
 
 export function TitleBar({ session, permission, onEnableNotifications }: Props) {
-  const platform = detectPlatform();
+  const host = useHost();
+  const platform = host.window.platform();
+  const insets = host.window.chromeInsets();
 
   return (
-    <header className={`titlebar platform-${platform}`}>
+    <header
+      className={`titlebar platform-${platform}`}
+      style={
+        {
+          '--chrome-lead': `${insets.lead}px`,
+          '--chrome-trail': `${insets.trail}px`,
+        } as React.CSSProperties
+      }
+    >
       <div className="titlebar-lead">
         <span className="wordmark">atrium</span>
       </div>

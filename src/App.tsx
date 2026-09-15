@@ -1,25 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DragProvider } from './dnd/DragProvider';
 import type { DragPayload } from './dnd/context';
-import {
-  notificationPermission,
-  requestNotificationPermission,
-  useAgentNotifications,
-} from './notifications';
+import { HostProvider } from './host/HostProvider';
+import { useHost } from './host/context';
+import { MockHost } from './host/mock';
+import type { Host } from './host/types';
+import { useAgentNotifications } from './notifications';
 import { PaneTree } from './components/PaneTree';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
-import { MockDriver } from './session/mock';
 import type { DropAction, Session } from './session/types';
 
-export default function App() {
-  // Swapping this one line for a real PTY driver is the entire graduation
-  // from mock to product.
-  const driver = useMemo(() => new MockDriver(), []);
+export default function App({ host }: { host?: Host }) {
+  // Swapping this one line for ElectronHost is the entire graduation from
+  // mock to product. Tests inject their own.
+  const resolved = useMemo(() => host ?? new MockHost(), [host]);
+  return (
+    <HostProvider host={resolved}>
+      <Workspace />
+    </HostProvider>
+  );
+}
+
+function Workspace() {
+  const host = useHost();
+  const driver = host.sessions;
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [permission, setPermission] = useState(notificationPermission());
+  const [permission, setPermission] = useState(host.notify.permission());
 
   useEffect(() => driver.subscribe(setSessions), [driver]);
 
@@ -62,7 +71,7 @@ export default function App() {
         <TitleBar
           session={active}
           permission={permission}
-          onEnableNotifications={() => void requestNotificationPermission().then(setPermission)}
+          onEnableNotifications={() => void host.notify.requestPermission().then(setPermission)}
         />
         <div className="body">
           <Sidebar

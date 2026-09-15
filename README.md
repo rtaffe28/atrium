@@ -9,13 +9,18 @@ browser speed before any systems work. See [`docs/plan/`](docs/plan).
 
 ```sh
 npm install
-npm run dev
+npm run dev     # design loop in a browser tab
+npm test        # 25 tests: drop-zone geometry, drag paths, host injection
 ```
 
 ## Layout
 
 ```
 src/
+  host/
+    types.ts    the Host interface — sessions, surfaces, git, files, notify, window
+    context.ts  useHost() / useCapability()
+    mock/       MockHost: a supported browser-tab implementation
   session/
     types.ts    the SessionDriver seam — UI above, platforms below
     mock.ts     scripted sessions, no processes
@@ -30,7 +35,8 @@ src/
     PaneView.tsx      one leaf: tab bar + active tab + edge drop zones
     TabBar.tsx        tabs, drag handles, close buttons
     TerminalView.tsx  xterm.js, WebGL with a DOM fallback
-    BrowserView.tsx   URL bar + iframe (becomes <webview> under Electron)
+    BrowserView.tsx   URL bar over a host-owned surface
+    HostSurface.tsx   a box the host fills (iframe now, <webview> later)
   notifications.ts    state diffing, synthesised chimes
   App.tsx       swap MockDriver here to graduate to real PTYs
 docs/plan/      overview, terminal primer, decisions, architecture, roadmap,
@@ -45,3 +51,4 @@ docs/plan/      overview, terminal primer, decisions, architecture, roadmap,
 4. [`docs/plan/03-architecture.md`](docs/plan/03-architecture.md) — the seam, cross-platform table
 5. [`docs/plan/04-roadmap.md`](docs/plan/04-roadmap.md) — the eight stages
 6. [`docs/plan/05-ui-model.md`](docs/plan/05-ui-model.md) — sessions, panes, tabs, drag, notifications
+7. [`docs/plan/06-host-interface.md`](docs/plan/06-host-interface.md) — the cross-platform host seam
