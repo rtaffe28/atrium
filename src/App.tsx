@@ -36,6 +36,13 @@ function Workspace() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /**
+   * The tab that should take keyboard focus.
+   *
+   * Set only by entering or creating something — never on mount or restore, or
+   * the cursor would be yanked around on every split and every launch.
+   */
+  const [focusTabId, setFocusTabId] = useState<string | null>(null);
 
   useEffect(() => driver.subscribe(setSessions), [driver]);
 
@@ -55,7 +62,8 @@ function Workspace() {
   const addTab = useCallback(
     (kind: 'terminal' | 'browser') => {
       if (!active || !targetGroupId) return;
-      driver.addTab(active.id, targetGroupId, kind);
+      const created = driver.addTab(active.id, targetGroupId, kind);
+      setFocusTabId(created.id);
     },
     [driver, active, targetGroupId],
   );
@@ -68,7 +76,24 @@ function Workspace() {
       command: settings.defaultCommand,
     });
     setActiveId(created.id);
+    setActiveGroupId(Object.keys(created.groups)[0] ?? null);
+    // Land in the new terminal ready to type, rather than on the button that
+    // opened it.
+    setFocusTabId(Object.keys(created.tabs)[0] ?? null);
   }, [driver, settings.defaultCommand]);
+
+  /** Entering an existing session should also put the cursor in its terminal. */
+  const selectSession = useCallback(
+    (id: string) => {
+      setActiveId(id);
+      const session = sessions.find((s) => s.id === id);
+      if (!session) return;
+      const group = session.groups[Object.keys(session.groups)[0]];
+      setActiveGroupId(group?.id ?? null);
+      setFocusTabId(group?.activeTabId ?? null);
+    },
+    [sessions],
+  );
 
   // Persist the workspace shortly after it settles. Debounced because a
   // splitter drag fires a change per frame, and writing the whole workspace
@@ -123,7 +148,7 @@ function Workspace() {
           <Sidebar
             sessions={sessions}
             activeId={active?.id ?? null}
-            onSelect={setActiveId}
+            onSelect={selectSession}
             onCreate={createSession}
             onKill={(id) => driver.killSession(id)}
           />
@@ -137,6 +162,7 @@ function Workspace() {
                 session={active}
                 driver={driver}
                 onFocus={setActiveGroupId}
+                focusTabId={focusTabId}
               />
             ) : (
               <div className="empty">

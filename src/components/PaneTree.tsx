@@ -5,18 +5,25 @@ import { PaneView } from './PaneView';
 interface Props {
   node: LayoutNode;
   onFocus: (groupId: string) => void;
+  focusTabId?: string | null;
   /** Child-index path from the layout root, so setSizes can find this split. */
   path: number[];
   session: Session;
   driver: SessionDriver;
 }
 
-export function PaneTree({ node, path, session, driver, onFocus }: Props) {
+export function PaneTree({ node, path, session, driver, onFocus, focusTabId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (node.type === 'leaf') {
     return (
-      <PaneView session={session} groupId={node.groupId} driver={driver} onFocus={onFocus} />
+      <PaneView
+        session={session}
+        groupId={node.groupId}
+        driver={driver}
+        onFocus={onFocus}
+        focusTabId={focusTabId}
+      />
     );
   }
 
@@ -57,6 +64,7 @@ export function PaneTree({ node, path, session, driver, onFocus }: Props) {
           session={session}
           driver={driver}
           onFocus={onFocus}
+          focusTabId={focusTabId}
         />
       </div>
       <div
@@ -72,6 +80,7 @@ export function PaneTree({ node, path, session, driver, onFocus }: Props) {
           session={session}
           driver={driver}
           onFocus={onFocus}
+          focusTabId={focusTabId}
         />
       </div>
     </div>

@@ -8,6 +8,9 @@ vi.mock('@xterm/xterm', () => ({
     rows = 24;
     loadAddon() {}
     open() {}
+    focus() {
+      (globalThis as Record<string, unknown>).__xtermFocused = true;
+    }
     write() {}
     dispose() {}
     attachCustomKeyEventHandler(handler: unknown) {

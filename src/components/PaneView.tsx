@@ -11,6 +11,7 @@ interface Props {
   groupId: string;
   driver: SessionDriver;
   onFocus: (groupId: string) => void;
+  focusTabId?: string | null;
 }
 
 /**
@@ -20,7 +21,7 @@ interface Props {
  * dropping a tab on the left quarter splits horizontally with the tab on the
  * left. Dropping in the middle moves it into this pane's tab bar instead.
  */
-export function PaneView({ session, groupId, driver, onFocus }: Props) {
+export function PaneView({ session, groupId, driver, onFocus, focusTabId }: Props) {
   const group = session.groups[groupId];
   const { register, action } = useDrag();
   const paneRef = useRef<HTMLElement>(null);
@@ -68,12 +69,13 @@ export function PaneView({ session, groupId, driver, onFocus }: Props) {
 
       <div className="pane-body">
         {activeTab?.kind === 'terminal' && (
-          <TerminalView tabId={activeTab.id} driver={driver} />
+          <TerminalView tabId={activeTab.id} driver={driver} focusTabId={focusTabId} />
         )}
         {activeTab?.kind === 'browser' && (
           <BrowserView
             tab={activeTab}
             onNavigate={(url) => driver.setTabUrl(session.id, activeTab.id, url)}
+            focusUrlBar={focusTabId === activeTab.id}
           />
         )}
         {!activeTab && <div className="empty">Empty pane</div>}

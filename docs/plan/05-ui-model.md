@@ -79,6 +79,11 @@ Deliberate choices, not defaults:
   an empty desktop or a browser tab strip. The handler sits on the outer
   element only: nesting a second one inside meant a single double-click
   created two sessions.
+- **Focus follows what you entered.** Creating a session, entering one from the
+  rail, or adding a tab puts the cursor in that terminal — a new browser tab
+  selects its address bar instead. The request is explicit rather than
+  "focus whatever just mounted", because the latter would yank the cursor on
+  every launch, every restore and every split.
 
 ## Notifications
 

@@ -33,6 +33,14 @@ const THEME = {
 interface Props {
   tabId: string;
   driver: SessionDriver;
+  /**
+   * When this matches our tab, take keyboard focus.
+   *
+   * Only ever set by an action that created or entered this tab. Focusing
+   * whenever a terminal mounts would steal the cursor on every split and on
+   * every restore, which is worse than the problem it solves.
+   */
+  focusTabId?: string | null;
 }
 
 /**
@@ -42,8 +50,9 @@ interface Props {
  * split, a tab move, or a session switch exercises exactly the path a real
  * driver uses to recover from a dropped connection.
  */
-export function TerminalView({ tabId, driver }: Props) {
+export function TerminalView({ tabId, driver, focusTabId }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
   const { settings } = useSettings();
   const fontSize = settings.terminalFontSize;
 
@@ -61,6 +70,8 @@ export function TerminalView({ tabId, driver }: Props) {
       scrollback: 10_000,
       theme: THEME,
     });
+
+    termRef.current = term;
 
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -109,8 +120,13 @@ export function TerminalView({ tabId, driver }: Props) {
       typed.dispose();
       detach();
       term.dispose();
+      termRef.current = null;
     };
   }, [tabId, driver, fontSize]);
+
+  useEffect(() => {
+    if (focusTabId === tabId) termRef.current?.focus();
+  }, [focusTabId, tabId]);
 
   return <div className="terminal-host" ref={hostRef} />;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCapability, useHost } from '../host/context';
 import type { Tab } from '../session/types';
 import { HostSurface } from './HostSurface';
@@ -6,14 +6,16 @@ import { HostSurface } from './HostSurface';
 interface Props {
   tab: Tab;
   onNavigate: (url: string) => void;
+  focusUrlBar?: boolean;
 }
 
-export function BrowserView({ tab, onNavigate }: Props) {
+export function BrowserView({ tab, onNavigate, focusUrlBar }: Props) {
   const host = useHost();
   const surfaceKind = useCapability('browserSurface');
   const [draft, setDraft] = useState(tab.url ?? '');
   const [syncedUrl, setSyncedUrl] = useState(tab.url);
   const [loading, setLoading] = useState(false);
+  const urlRef = useRef<HTMLInputElement>(null);
 
   // Adjusting state during render is the documented way to reset on a prop
   // change — cheaper than an effect, and no cascading render.
@@ -21,6 +23,14 @@ export function BrowserView({ tab, onNavigate }: Props) {
     setSyncedUrl(tab.url);
     setDraft(tab.url ?? '');
   }
+
+  useEffect(() => {
+    if (!focusUrlBar) return;
+    // focus() then select(): select() alone moves the caret without taking
+    // focus, so the field looks ready to type in and is not.
+    urlRef.current?.focus();
+    urlRef.current?.select();
+  }, [focusUrlBar]);
 
   useEffect(
     () =>
@@ -55,6 +65,7 @@ export function BrowserView({ tab, onNavigate }: Props) {
           ↻
         </button>
         <input
+          ref={urlRef}
           className="browser-url"
           value={draft}
           spellCheck={false}
