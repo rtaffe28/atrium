@@ -4,17 +4,20 @@ import { PaneView } from './PaneView';
 
 interface Props {
   node: LayoutNode;
+  onFocus: (groupId: string) => void;
   /** Child-index path from the layout root, so setSizes can find this split. */
   path: number[];
   session: Session;
   driver: SessionDriver;
 }
 
-export function PaneTree({ node, path, session, driver }: Props) {
+export function PaneTree({ node, path, session, driver, onFocus }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (node.type === 'leaf') {
-    return <PaneView session={session} groupId={node.groupId} driver={driver} />;
+    return (
+      <PaneView session={session} groupId={node.groupId} driver={driver} onFocus={onFocus} />
+    );
   }
 
   const horizontal = node.direction === 'row';
@@ -48,7 +51,13 @@ export function PaneTree({ node, path, session, driver }: Props) {
   return (
     <div className={`split split-${node.direction}`} ref={containerRef}>
       <div className="split-child" style={{ flexGrow: node.sizes[0] }}>
-        <PaneTree node={node.children[0]} path={[...path, 0]} session={session} driver={driver} />
+        <PaneTree
+          node={node.children[0]}
+          path={[...path, 0]}
+          session={session}
+          driver={driver}
+          onFocus={onFocus}
+        />
       </div>
       <div
         className={`splitter splitter-${node.direction}`}
@@ -57,7 +66,13 @@ export function PaneTree({ node, path, session, driver }: Props) {
         aria-orientation={horizontal ? 'vertical' : 'horizontal'}
       />
       <div className="split-child" style={{ flexGrow: node.sizes[1] }}>
-        <PaneTree node={node.children[1]} path={[...path, 1]} session={session} driver={driver} />
+        <PaneTree
+          node={node.children[1]}
+          path={[...path, 1]}
+          session={session}
+          driver={driver}
+          onFocus={onFocus}
+        />
       </div>
     </div>
   );

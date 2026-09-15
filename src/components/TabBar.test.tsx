@@ -8,59 +8,83 @@ function openSessionWithTwoTabs() {
   });
 }
 
-describe('the + menu', () => {
+const tabCount = () => document.querySelectorAll('[data-tab-id]').length;
+
+describe('creating tabs', () => {
   afterEach(cleanup);
 
-  it('adds a terminal tab', () => {
+  it('adds a terminal from the pane + button', () => {
     render(<App />);
     openSessionWithTwoTabs();
-    const before = document.querySelectorAll('[data-tab-id]').length;
+    const before = tabCount();
 
-    act(() => fireEvent.click(document.querySelector('.tab-add button')!));
-    act(() => fireEvent.click(screen.getByText('Terminal')));
+    act(() => fireEvent.click(screen.getByTitle('New terminal in this pane')));
 
-    expect(document.querySelectorAll('[data-tab-id]').length).toBe(before + 1);
+    expect(tabCount()).toBe(before + 1);
   });
 
-  it('adds a browser tab', () => {
+  it('adds a terminal from the title bar', () => {
     render(<App />);
     openSessionWithTwoTabs();
-    const before = document.querySelectorAll('[data-tab-id]').length;
+    const before = tabCount();
 
-    act(() => fireEvent.click(document.querySelector('.tab-add button')!));
-    act(() => fireEvent.click(screen.getByText('Browser')));
+    act(() => fireEvent.click(screen.getByTitle('New terminal tab')));
 
-    expect(document.querySelectorAll('[data-tab-id]').length).toBe(before + 1);
+    expect(tabCount()).toBe(before + 1);
+  });
+
+  it('adds a browser from the title bar', () => {
+    render(<App />);
+    openSessionWithTwoTabs();
+    const before = tabCount();
+
+    act(() => fireEvent.click(screen.getByTitle('New browser tab')));
+
+    expect(tabCount()).toBe(before + 1);
   });
 
   /**
-   * The menu must not live inside the tab bar.
-   *
-   * .tabbar scrolls horizontally, and an overflow container clips
-   * absolutely-positioned children — which made the dropdown render but be
-   * invisible and unclickable. jsdom applies no CSS and so cannot see the
-   * clipping; asserting where the node lands is the part that is testable,
-   * and it is exactly the property the fix relies on.
+   * A new tab should land in the pane you were last working in, not always the
+   * first one — otherwise the buttons feel arbitrary once the view is split.
    */
-  it('portals the menu out of the scrolling tab bar', () => {
+  it('adds the tab to the pane that was last touched', () => {
     render(<App />);
     openSessionWithTwoTabs();
-    act(() => fireEvent.click(document.querySelector('.tab-add button')!));
 
-    const menu = document.querySelector('.menu');
-    expect(menu).not.toBeNull();
-    expect(menu!.closest('.tabbar')).toBeNull();
+    // Split so there are two panes, then touch the second one.
+    const tabs = [...document.querySelectorAll('[data-tab-id]')];
+    act(() => {
+      fireEvent.pointerDown(tabs[1], { clientX: 700, clientY: 50, button: 0 });
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 700, clientY: 400 }));
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 1400, clientY: 500 }));
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 1400, clientY: 500 }));
+    });
+
+    const panes = [...document.querySelectorAll('.pane')];
+    expect(panes).toHaveLength(2);
+
+    const secondPaneTabsBefore = panes[1].querySelectorAll('[data-tab-id]').length;
+    act(() => fireEvent.pointerDown(panes[1]));
+    act(() => fireEvent.click(screen.getByTitle('New terminal tab')));
+
+    const after = [...document.querySelectorAll('.pane')][1].querySelectorAll('[data-tab-id]').length;
+    expect(after).toBe(secondPaneTabsBefore + 1);
   });
+});
 
-  it('closes without adding anything when the scrim is clicked', () => {
+describe('the empty workspace', () => {
+  afterEach(cleanup);
+
+  it('opens a session on double click', () => {
     render(<App />);
-    openSessionWithTwoTabs();
-    const before = document.querySelectorAll('[data-tab-id]').length;
+    // Kill every session so the empty state is showing.
+    act(() => {
+      for (const kill of document.querySelectorAll('.session-kill')) fireEvent.click(kill);
+    });
+    expect(document.querySelector('.empty')).not.toBeNull();
 
-    act(() => fireEvent.click(document.querySelector('.tab-add button')!));
-    act(() => fireEvent.click(document.querySelector('.menu-scrim')!));
+    act(() => fireEvent.doubleClick(document.querySelector('.empty')!));
 
-    expect(document.querySelector('.menu')).toBeNull();
-    expect(document.querySelectorAll('[data-tab-id]').length).toBe(before);
+    expect(document.querySelectorAll('.session-row').length).toBe(1);
   });
 });

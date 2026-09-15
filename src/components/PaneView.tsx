@@ -10,6 +10,7 @@ interface Props {
   session: Session;
   groupId: string;
   driver: SessionDriver;
+  onFocus: (groupId: string) => void;
 }
 
 /**
@@ -19,7 +20,7 @@ interface Props {
  * dropping a tab on the left quarter splits horizontally with the tab on the
  * left. Dropping in the middle moves it into this pane's tab bar instead.
  */
-export function PaneView({ session, groupId, driver }: Props) {
+export function PaneView({ session, groupId, driver, onFocus }: Props) {
   const group = session.groups[groupId];
   const { register, action } = useDrag();
   const paneRef = useRef<HTMLElement>(null);
@@ -55,7 +56,7 @@ export function PaneView({ session, groupId, driver }: Props) {
     action?.kind === 'tabbar' && action.groupId === groupId && action.index === APPEND;
 
   return (
-    <section className="pane" ref={paneRef}>
+    <section className="pane" ref={paneRef} onPointerDownCapture={() => onFocus(groupId)}>
       <TabBar
         barRef={barRef}
         session={session}

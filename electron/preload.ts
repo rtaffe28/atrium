@@ -34,6 +34,7 @@ const bridge = {
     }): Promise<{ pid: number }> => ipcRenderer.invoke('pty:spawn', options),
 
     replay: (id: string): Promise<string> => ipcRenderer.invoke('pty:replay', id),
+    foreground: (): Promise<Record<string, string>> => ipcRenderer.invoke('pty:foreground'),
 
     write: (id: string, data: string) => ipcRenderer.send('pty:write', id, data),
     resize: (id: string, cols: number, rows: number) =>

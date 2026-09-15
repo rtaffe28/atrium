@@ -20,6 +20,7 @@ export interface AtriumBridge {
       args?: string[];
     }): Promise<{ pid: number }>;
     replay(id: string): Promise<string>;
+    foreground(): Promise<Record<string, string>>;
     write(id: string, data: string): void;
     resize(id: string, cols: number, rows: number): void;
     interrupt(id: string): void;

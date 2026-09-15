@@ -70,7 +70,15 @@ Deliberate choices, not defaults:
 - **X kills.** No Interrupt/Kill buttons: an `×` on the session row kills the
   session, an `×` on a tab closes the tab. Buttons for destructive actions
   belong on the thing they destroy.
-- **⌘N / Ctrl+N** opens a session. The modifier follows the platform.
+- **⌘N / Ctrl+N** opens a session, **⌘,** opens settings. The modifier follows
+  the platform.
+- **New tabs** come from two icons at the top right — a terminal window and a
+  globe, the conventional marks — which add to whichever pane you last
+  touched. The pane's own `+` adds a terminal there directly.
+- **Double-clicking the empty workspace** opens a session, the same gesture as
+  an empty desktop or a browser tab strip. The handler sits on the outer
+  element only: nesting a second one inside meant a single double-click
+  created two sessions.
 
 ## Notifications
 

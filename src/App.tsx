@@ -34,6 +34,7 @@ function Workspace() {
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => driver.subscribe(setSessions), [driver]);
@@ -43,6 +44,21 @@ function Workspace() {
   // activeId is only a preference. Resolving it during render means a killed
   // session falls back to the next one without an effect round-trip.
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0] ?? null;
+
+  // Where a new tab lands: the pane you last touched, falling back to the
+  // first one so the title-bar buttons still work before you click anything.
+  const targetGroupId =
+    active && activeGroupId && active.groups[activeGroupId]
+      ? activeGroupId
+      : (active && Object.keys(active.groups)[0]) || null;
+
+  const addTab = useCallback(
+    (kind: 'terminal' | 'browser') => {
+      if (!active || !targetGroupId) return;
+      driver.addTab(active.id, targetGroupId, kind);
+    },
+    [driver, active, targetGroupId],
+  );
 
   const createSession = useCallback(() => {
     const created = driver.createSession({
@@ -97,7 +113,12 @@ function Workspace() {
   return (
     <DragProvider onDrop={handleDrop}>
       <div className="app">
-        <TitleBar session={active} onOpenSettings={() => setSettingsOpen(true)} />
+        <TitleBar
+          session={active}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onNewTab={addTab}
+          canAddTab={Boolean(active && targetGroupId)}
+        />
         <div className="body">
           <Sidebar
             sessions={sessions}
@@ -106,15 +127,24 @@ function Workspace() {
             onCreate={createSession}
             onKill={(id) => driver.killSession(id)}
           />
-          <main className="workspace">
+          {/* Double-clicking the empty workspace opens a session — the same
+              gesture as an empty desktop or a browser's tab strip. */}
+          <main className="workspace" onDoubleClick={active ? undefined : createSession}>
             {active ? (
-              <PaneTree node={active.layout} path={[]} session={active} driver={driver} />
+              <PaneTree
+                node={active.layout}
+                path={[]}
+                session={active}
+                driver={driver}
+                onFocus={setActiveGroupId}
+              />
             ) : (
               <div className="empty">
                 <p>No sessions.</p>
                 <button className="ghost-button" onClick={createSession}>
                   New session
                 </button>
+                <span className="empty-hint">or double-click anywhere here</span>
               </div>
             )}
           </main>

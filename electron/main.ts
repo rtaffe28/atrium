@@ -103,6 +103,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('pty:spawn', (_e, options) => ptys.spawn(options));
   ipcMain.handle('pty:replay', (_e, id: string) => ptys.replay(id));
+  ipcMain.handle('pty:foreground', () => ptys.foreground());
   ipcMain.on('pty:write', (_e, id: string, data: string) => ptys.write(id, data));
   ipcMain.on('pty:resize', (_e, id: string, cols: number, rows: number) =>
     ptys.resize(id, cols, rows),

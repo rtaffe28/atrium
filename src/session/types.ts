@@ -24,6 +24,15 @@ export interface Tab {
   title: string;
   /** Terminal tabs only. Absent means a plain shell, not an agent. */
   agent?: string;
+  /**
+   * What is running in this tab, captured live from the pty's foreground
+   * process, and re-run when the workspace is restored.
+   *
+   * Without this, a tab where you typed `claude` by hand comes back as a bare
+   * shell — the app has no record that anything was running, and you are left
+   * hunting for the session you had.
+   */
+  command?: string;
   /** Terminal tabs running an agent. Drives the rail and notifications. */
   agentState?: AgentState;
   /** Browser tabs only. */

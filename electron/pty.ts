@@ -69,6 +69,24 @@ export class PtyManager {
     return { pid: term.pid };
   }
 
+  /**
+   * The foreground process of each live pty, by tab id.
+   *
+   * This is how a terminal knows what is actually running in it — the tty's
+   * foreground process group — rather than guessing from what was typed.
+   */
+  foreground(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [id, entry] of this.entries) {
+      try {
+        out[id] = entry.pty.process;
+      } catch {
+        // The process died between iterating and asking.
+      }
+    }
+    return out;
+  }
+
   /** Scrollback for a tab that is mounting or remounting. */
   replay(id: string): string {
     return this.entries.get(id)?.buffer ?? '';

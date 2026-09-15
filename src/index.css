@@ -78,7 +78,15 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
   justify-content: center;
   min-width: 0;
 }
-.titlebar-trail { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.titlebar-trail { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+
+.titlebar-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
 
 .wordmark { font-weight: 600; letter-spacing: 0.02em; }
 
@@ -161,7 +169,9 @@ kbd {
   line-height: 1;
   transition: background 120ms, color 120ms;
 }
-.icon-button:hover { background: var(--panel-high); color: var(--text); }
+.icon-button:hover:not(:disabled) { background: var(--panel-high); color: var(--text); }
+.icon-button:disabled { opacity: 0.35; cursor: not-allowed; }
+.icon-button svg { display: block; }
 .icon-button.subtle { border-color: transparent; background: transparent; }
 .icon-button.subtle:hover { background: var(--panel-high); }
 
@@ -419,31 +429,6 @@ kbd {
 
 .tab-add { display: flex; align-items: center; padding-left: 4px; position: relative; }
 
-.menu-scrim { position: fixed; inset: 0; z-index: 40; }
-.menu {
-  position: fixed;
-  z-index: 41;
-  min-width: 150px;
-  padding: 4px;
-  background: var(--panel-high);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 10px 26px rgb(0 0 0 / 0.45);
-}
-.menu button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-dim);
-  text-align: left;
-}
-.menu button:hover { background: var(--panel-raised); color: var(--text); }
-
 /* ── pane body ───────────────────────────────────────────────────────── */
 
 .pane-body { flex: 1; min-height: 0; position: relative; display: flex; }
@@ -554,7 +539,9 @@ webview.surface-frame { display: inline-flex; }
   justify-content: center;
   gap: 12px;
   color: var(--text-faint);
+  user-select: none;
 }
+.empty-hint { font-size: 11px; opacity: 0.7; }
 
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb {

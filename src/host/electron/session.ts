@@ -11,6 +11,9 @@ export interface RestoreInput {
 /** No output for this long after activity means the agent has stopped. */
 const SETTLE_MS = 1500;
 
+/** How often to ask the ptys what is running in them. */
+const POLL_MS = 2000;
+
 interface Stream {
   buffer: string;
   listeners: Set<DataHandler>;
@@ -42,14 +45,24 @@ interface Stream {
 export class ElectronSessionDriver extends SessionStore {
   private streams = new Map<string, Stream>();
   private agents = new Set<string>();
+  /** Characters typed since the last Enter, so we can recover a full command. */
+  private typing = new Map<string, string>();
+  /** The last line submitted in each tab — the command with its arguments. */
+  private submitted = new Map<string, string>();
+  /** Commands waiting to be typed into a freshly spawned shell. */
+  private autorun = new Map<string, string>();
+  private poll = 0;
 
   private bridge: AtriumBridge;
   private home: string;
 
-  constructor(bridge: AtriumBridge, home: string, restore?: RestoreInput) {
+  private shellName: string;
+
+  constructor(bridge: AtriumBridge, home: string, shell: string, restore?: RestoreInput) {
     super();
     this.bridge = bridge;
     this.home = home;
+    this.shellName = shell.split('/').pop() ?? 'zsh';
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
     this.bridge.pty.onExit((tabId) => {
       this.setAgentState(tabId, undefined);
@@ -60,6 +73,57 @@ export class ElectronSessionDriver extends SessionStore {
       this.hydrate(restore.sessions, restore.scrollback);
     } else {
       this.seed();
+    }
+
+    this.poll = window.setInterval(() => void this.refreshCommands(), POLL_MS);
+    // A reload tears down the renderer but not the ptys; stop asking them
+    // things from a document that is on its way out.
+    window.addEventListener('beforeunload', () => this.dispose());
+  }
+
+  dispose(): void {
+    window.clearInterval(this.poll);
+  }
+
+  /**
+   * Record what is actually running in each tab.
+   *
+   * The pty's foreground process is the truth — it is how a terminal knows
+   * `vim` is open rather than a shell. But it gives a bare name, so when the
+   * last line typed starts with that name we keep the whole line, arguments
+   * included: re-running `claude --continue` is the point, and `claude` alone
+   * would start a fresh conversation.
+   */
+  async refreshCommands(): Promise<void> {
+    let foreground: Record<string, string>;
+    try {
+      foreground = await this.bridge.pty.foreground();
+    } catch {
+      return;
+    }
+
+    for (const session of this.list()) {
+      for (const tab of Object.values(session.tabs)) {
+        if (tab.kind !== 'terminal') continue;
+
+        const running = foreground[tab.id];
+        if (!running) continue;
+
+        const idle = running === this.shellName;
+        const line = this.submitted.get(tab.id) ?? '';
+        const command = idle
+          ? undefined
+          : line.split(/\s+/)[0] === running
+            ? line
+            : running;
+        const title = idle ? this.shellName : running;
+
+        if (tab.command === command && tab.title === title) continue;
+        this.update(session.id, (s) => ({
+          ...s,
+          tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], command, title } },
+        }));
+      }
     }
   }
 
@@ -94,6 +158,15 @@ export class ElectronSessionDriver extends SessionStore {
 
   private receive(tabId: string, data: string) {
     const stream = this.stream(tabId);
+
+    // The shell is up once it has said anything; now it can be typed into.
+    const queued = this.autorun.get(tabId);
+    if (queued) {
+      this.autorun.delete(tabId);
+      this.submitted.set(tabId, queued);
+      this.bridge.pty.write(tabId, `${queued}\r`);
+    }
+
     stream.buffer += data;
     for (const listener of stream.listeners) listener(data);
 
@@ -119,15 +192,21 @@ export class ElectronSessionDriver extends SessionStore {
     }));
   }
 
-  protected openTerminal(tabId: string, cwd: string, agent?: string): void {
-    if (agent) this.agents.add(tabId);
+  protected openTerminal(tabId: string, cwd: string, command?: string): void {
+    const wanted = command?.trim();
+    if (wanted) this.agents.add(tabId);
+
+    // Always spawn the shell, then type the command into it. Replacing the
+    // shell would mean the tab vanishes the moment the command exits, and it
+    // would lose quoting and arguments that the shell parses for free.
     void this.bridge.pty.spawn({
       id: tabId,
       cwd: cwd.startsWith('~') ? cwd.replace('~', this.home) : cwd,
       cols: 80,
       rows: 24,
-      ...(agent && agent !== 'shell' ? { shell: agent, args: [] } : {}),
     });
+
+    if (wanted && wanted !== this.shellName) this.autorun.set(tabId, wanted);
   }
 
   protected closeTerminal(tabId: string): void {
@@ -135,6 +214,9 @@ export class ElectronSessionDriver extends SessionStore {
     if (stream) window.clearTimeout(stream.settle);
     this.streams.delete(tabId);
     this.agents.delete(tabId);
+    this.typing.delete(tabId);
+    this.submitted.delete(tabId);
+    this.autorun.delete(tabId);
     this.bridge.pty.kill(tabId);
   }
 
@@ -161,8 +243,30 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   write(tabId: string, data: string): void {
+    this.captureTyping(tabId, data);
     // A real PTY echoes; unlike the mock we must not echo ourselves.
     this.bridge.pty.write(tabId, data);
+  }
+
+  /** Reassemble the line being typed, so a submitted command keeps its args. */
+  private captureTyping(tabId: string, data: string): void {
+    let buffer = this.typing.get(tabId) ?? '';
+    for (const char of data) {
+      if (char === '\r' || char === '\n') {
+        const line = buffer.trim();
+        if (line) this.submitted.set(tabId, line);
+        buffer = '';
+      } else if (char === '\x7f' || char === '\b') {
+        buffer = buffer.slice(0, -1);
+      } else if (char >= ' ') {
+        buffer += char;
+      } else {
+        // Control characters mean something interactive is happening; whatever
+        // was half-typed is not a command line.
+        buffer = '';
+      }
+    }
+    this.typing.set(tabId, buffer);
   }
 
   resize(tabId: string, cols: number, rows: number): void {

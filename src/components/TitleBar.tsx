@@ -21,9 +21,11 @@ import type { Session } from '../session/types';
 interface Props {
   session: Session | null;
   onOpenSettings: () => void;
+  onNewTab: (kind: 'terminal' | 'browser') => void;
+  canAddTab: boolean;
 }
 
-export function TitleBar({ session, onOpenSettings }: Props) {
+export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab }: Props) {
   const host = useHost();
   const platform = host.window.platform();
   const insets = host.window.chromeInsets();
@@ -55,6 +57,58 @@ export function TitleBar({ session, onOpenSettings }: Props) {
       </div>
 
       <div className="titlebar-trail">
+        <button
+          className="icon-button subtle"
+          onClick={() => onNewTab('terminal')}
+          disabled={!canAddTab}
+          title="New terminal tab"
+          aria-label="New terminal tab"
+        >
+          {/* A terminal window with a prompt — the convention users already
+              read as "terminal" in VS Code, iTerm and macOS Terminal. */}
+          <svg viewBox="0 0 16 16" aria-hidden width="14" height="14" fill="none">
+            <rect
+              x="1.6"
+              y="2.6"
+              width="12.8"
+              height="10.8"
+              rx="2"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            />
+            <path
+              d="M4.4 6.4 6.6 8.3 4.4 10.2"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M8.4 10.4h3.2"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <button
+          className="icon-button subtle"
+          onClick={() => onNewTab('browser')}
+          disabled={!canAddTab}
+          title="New browser tab"
+          aria-label="New browser tab"
+        >
+          {/* A globe — the standard "the web" mark, and visually distinct from
+              the terminal window so the pair reads at a glance. */}
+          <svg viewBox="0 0 16 16" aria-hidden width="14" height="14" fill="none">
+            <g stroke="currentColor" strokeWidth="1.3">
+              <circle cx="8" cy="8" r="6" />
+              <ellipse cx="8" cy="8" rx="2.7" ry="6" />
+              <path d="M2.3 6h11.4M2.3 10h11.4" strokeLinecap="round" />
+            </g>
+          </svg>
+        </button>
+        <span className="titlebar-divider" />
         <button
           className="icon-button subtle"
           onClick={onOpenSettings}
