@@ -10,7 +10,10 @@ vi.mock('@xterm/xterm', () => ({
     open() {}
     write() {}
     dispose() {}
-    attachCustomKeyEventHandler() {}
+    attachCustomKeyEventHandler(handler: unknown) {
+      (globalThis as Record<string, unknown>).__xtermKeyHandlers ??= [];
+      ((globalThis as Record<string, unknown>).__xtermKeyHandlers as unknown[]).push(handler);
+    }
     onData() {
       return { dispose() {} };
     }

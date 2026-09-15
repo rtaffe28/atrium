@@ -114,7 +114,7 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
 
       <footer className="sidebar-foot">
         <span className="dim">mock driver</span>
-        <span className="dim">esc interrupts</span>
+        <span className="dim">⌘N new · ⌘, settings</span>
       </footer>
     </nav>
   );

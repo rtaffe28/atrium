@@ -76,16 +76,11 @@ export function TerminalView({ tabId, driver }: Props) {
 
     fit.fit();
 
-    // Escape interrupts the agent rather than reaching the process. Agents
-    // treat a bare ESC as a cancel, and this is the one keybinding users reach
-    // for without thinking — so it is worth taking away from the PTY.
-    term.attachCustomKeyEventHandler((event) => {
-      if (event.type === 'keydown' && event.key === 'Escape') {
-        driver.interrupt(tabId);
-        return false;
-      }
-      return true;
-    });
+    // No custom key handling. Every keystroke reaches the pty, Escape
+    // included: ESC is load-bearing for vim, readline and agents' own cancel
+    // handling, and swallowing it to synthesise an interrupt breaks all three.
+    // Ctrl-C already does the right thing without our help — xterm sends 0x03
+    // and the line discipline turns it into SIGINT for the foreground group.
 
     const detach = driver.attach(tabId, (chunk) => term.write(chunk));
     const typed = term.onData((data) => driver.write(tabId, data));

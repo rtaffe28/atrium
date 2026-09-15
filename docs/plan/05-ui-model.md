@@ -62,10 +62,11 @@ as a click.
 
 Deliberate choices, not defaults:
 
-- **Escape interrupts** the agent rather than reaching the process. Agents
-  treat a bare ESC as cancel, and it is the key users reach for without
-  thinking — worth taking away from the PTY. Implemented via xterm's
-  `attachCustomKeyEventHandler`.
+- **No key is taken from the terminal.** Escape reaches the pty like anything
+  else. It is load-bearing for vim, readline and agents' own cancel handling,
+  and an app that swallows it to synthesise an interrupt breaks all three.
+  Ctrl-C needs no help: xterm sends `0x03` and the line discipline turns it
+  into SIGINT for the foreground process group.
 - **X kills.** No Interrupt/Kill buttons: an `×` on the session row kills the
   session, an `×` on a tab closes the tab. Buttons for destructive actions
   belong on the thing they destroy.
