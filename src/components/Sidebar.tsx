@@ -45,8 +45,20 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
   const railActive = action?.kind === 'rail';
   const needsAttention = sessions.filter((s) => deriveSessionState(s) === 'waiting').length;
 
+  // Double-clicking blank rail space opens a session — the same gesture as the
+  // empty workspace. Guarded so a double-click on a row is still just a
+  // double-click on that row.
+  const onBackgroundDoubleClick = (event: React.MouseEvent) => {
+    if ((event.target as HTMLElement).closest('.session-row, button')) return;
+    onCreate();
+  };
+
   return (
-    <nav className={`sidebar${railActive ? ' is-drop-target' : ''}`} ref={railRef}>
+    <nav
+      className={`sidebar${railActive ? ' is-drop-target' : ''}`}
+      ref={railRef}
+      onDoubleClick={onBackgroundDoubleClick}
+    >
       <header className="sidebar-head">
         <div className="sidebar-title">
           Sessions
@@ -62,6 +74,7 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
       </header>
 
       <ul className="session-list">
+
         {sessions.map((session) => {
           const state = deriveSessionState(session);
           const tabCount = Object.keys(session.tabs).length;

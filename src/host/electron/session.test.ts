@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ElectronSessionDriver } from './session';
 import type { AtriumBridge } from './bridge';
 
@@ -69,16 +69,58 @@ describe('capturing what is running in a tab', () => {
     driver.dispose();
   });
 
-  it('falls back to the process name when the typed line does not match', async () => {
+  it('trusts what was typed over a process that renamed itself', async () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
     const { tabId } = firstTerminalTab(driver);
 
-    driver.write(tabId, 'ls\r');
-    f.setForeground({ [tabId]: 'vim' }); // opened some other way
+    driver.write(tabId, 'claude\r');
+    // Claude Code reports as its version. Trusting this name recorded
+    // "2.1.273" as the command, and restore typed that into a shell.
+    f.setForeground({ [tabId]: '2.1.273' });
+
+    await driver.refreshCommands();
+    const tab = driver.list()[0].tabs[tabId];
+    expect(tab.command).toBe('claude');
+    expect(tab.title).toBe('claude');
+    driver.dispose();
+  });
+
+  it('prefers the wrapper that was typed over the process it spawned', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
+    const { tabId } = firstTerminalTab(driver);
+
+    driver.write(tabId, 'npm run dev\r');
+    f.setForeground({ [tabId]: 'node' });
+
+    await driver.refreshCommands();
+    // Restoring `npm run dev` is useful; restoring bare `node` is not.
+    expect(driver.list()[0].tabs[tabId].command).toBe('npm run dev');
+    driver.dispose();
+  });
+
+  it('falls back to the process name for a tab nobody typed in', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
+    const { tabId } = firstTerminalTab(driver);
+
+    f.setForeground({ [tabId]: 'vim' });
 
     await driver.refreshCommands();
     expect(driver.list()[0].tabs[tabId].command).toBe('vim');
+    driver.dispose();
+  });
+
+  it('records nothing when the process name could not be typed', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
+    const { tabId } = firstTerminalTab(driver);
+
+    f.setForeground({ [tabId]: '2.1.273' });
+
+    await driver.refreshCommands();
+    expect(driver.list()[0].tabs[tabId].command).toBeUndefined();
     driver.dispose();
   });
 
@@ -112,7 +154,10 @@ describe('capturing what is running in a tab', () => {
 });
 
 describe('restoring a captured command', () => {
-  it('types the command into a fresh shell instead of replacing it', async () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('types the command into a fresh shell, once its prompt has settled', async () => {
+    vi.useFakeTimers();
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', {
       sessions: [
@@ -137,9 +182,41 @@ describe('restoring a captured command', () => {
     expect(f.spawned).toEqual([{ id: 't1', cwd: '/Users/ryan/work' }]);
     expect(f.written).toHaveLength(0);
 
-    // The command is typed once the shell has shown it is alive.
+    // The first chunk is often a partial line, not a prompt — typing then gets
+    // mangled by a line editor that is not ready yet.
+    f.emit('t1', '\x1b[1m%\x1b[0m');
+    vi.advanceTimersByTime(200);
+    expect(f.written, 'must not type into a shell that is still printing').toHaveLength(0);
+
+    // More output restarts the clock.
     f.emit('t1', '~/work % ');
+    vi.advanceTimersByTime(200);
+    expect(f.written).toHaveLength(0);
+
+    // Once it goes quiet, the command goes in.
+    vi.advanceTimersByTime(200);
     expect(f.written).toEqual([{ id: 't1', data: 'claude --continue\r' }]);
+    driver.dispose();
+  });
+
+  it('sanitises replayed scrollback so it cannot re-answer terminal queries', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
+    const { tabId } = firstTerminalTab(driver);
+
+    // A device-attributes query and focus-reporting mode, as a real agent
+    // leaves behind in its output.
+    f.emit(tabId, `before\x1b[c\x1b[?1004hafter`);
+
+    let replayed = '';
+    driver.attach(tabId, (chunk) => {
+      replayed += chunk;
+    });
+
+    expect(replayed).toContain('before');
+    expect(replayed).toContain('after');
+    expect(replayed, 'a replayed query would be answered into the shell').not.toContain('\x1b[c');
+    expect(replayed, 'a replayed mode would re-arm focus reporting').not.toContain('[?1004h');
     driver.dispose();
   });
 });

@@ -72,6 +72,29 @@ describe('creating tabs', () => {
   });
 });
 
+describe('the session rail', () => {
+  afterEach(cleanup);
+
+  it('opens a session when blank rail space is double-clicked', () => {
+    render(<App />);
+    const before = document.querySelectorAll('.session-row').length;
+
+    act(() => fireEvent.doubleClick(document.querySelector('.session-list')!));
+
+    expect(document.querySelectorAll('.session-row').length).toBe(before + 1);
+  });
+
+  /** A double-click on a row is about that row, not a request for a new one. */
+  it('does not open a session when a row is double-clicked', () => {
+    render(<App />);
+    const before = document.querySelectorAll('.session-row').length;
+
+    act(() => fireEvent.doubleClick(document.querySelector('.session-row')!));
+
+    expect(document.querySelectorAll('.session-row').length).toBe(before);
+  });
+});
+
 describe('the empty workspace', () => {
   afterEach(cleanup);
 

@@ -27,6 +27,15 @@ export interface Settings {
    * thing that differs per person.
    */
   defaultCommand: string;
+  /**
+   * How a captured command is rewritten when a session is restored, one
+   * `command = replacement` per line.
+   *
+   * Restoring is pointless if it hands you a blank agent, and only the agent
+   * knows how to resume itself — so this is a mapping rather than anything the
+   * app tries to be clever about.
+   */
+  restoreOverrides: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyOn: { waiting: true, done: true, error: true },
   terminalFontSize: 13,
   defaultCommand: 'claude',
+  restoreOverrides: 'claude = claude --continue',
 };
 
 export const FONT_SIZES = [11, 12, 13, 14, 16] as const;

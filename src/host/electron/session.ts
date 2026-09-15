@@ -1,5 +1,7 @@
 import { SessionStore } from '../../session/store';
 import type { AgentState, DataHandler, Unsubscribe } from '../../session/types';
+import { plausibleCommand } from '../../session/command';
+import { sanitizeHistory } from '../../session/history';
 import type { Session } from '../../session/types';
 import type { AtriumBridge } from './bridge';
 
@@ -13,6 +15,16 @@ const SETTLE_MS = 1500;
 
 /** How often to ask the ptys what is running in them. */
 const POLL_MS = 2000;
+
+/**
+ * How long the shell must be quiet before a restored command is typed.
+ *
+ * Writing on the first byte is too early: the first chunk is often a partial
+ * line or terminal setup, not a prompt, and characters sent then are mangled
+ * or swallowed by a line editor that is not ready. Waiting for output to stop
+ * is a far better proxy for "the shell is sitting at a prompt".
+ */
+const SHELL_SETTLE_MS = 350;
 
 interface Stream {
   buffer: string;
@@ -50,7 +62,7 @@ export class ElectronSessionDriver extends SessionStore {
   /** The last line submitted in each tab — the command with its arguments. */
   private submitted = new Map<string, string>();
   /** Commands waiting to be typed into a freshly spawned shell. */
-  private autorun = new Map<string, string>();
+  private autorun = new Map<string, { command: string; timer: number }>();
   private poll = 0;
 
   private bridge: AtriumBridge;
@@ -88,11 +100,15 @@ export class ElectronSessionDriver extends SessionStore {
   /**
    * Record what is actually running in each tab.
    *
-   * The pty's foreground process is the truth — it is how a terminal knows
-   * `vim` is open rather than a shell. But it gives a bare name, so when the
-   * last line typed starts with that name we keep the whole line, arguments
-   * included: re-running `claude --continue` is the point, and `claude` alone
-   * would start a fresh conversation.
+   * The pty's foreground process answers *whether* something is running — it
+   * is how a terminal knows `vim` is open rather than a shell. It is a poor
+   * answer to *what*, though, because a process can rename itself: Claude Code
+   * reports as its own version number, so trusting the name recorded `2.1.273`
+   * as the command and restore dutifully typed that into a shell.
+   *
+   * So the line the user actually submitted wins, and the process name is only
+   * a fallback for a tab nobody typed in. That is also better for wrappers:
+   * `npm run dev` is a more useful thing to restore than `node`.
    */
   async refreshCommands(): Promise<void> {
     let foreground: Record<string, string>;
@@ -111,12 +127,10 @@ export class ElectronSessionDriver extends SessionStore {
 
         const idle = running === this.shellName;
         const line = this.submitted.get(tab.id) ?? '';
-        const command = idle
-          ? undefined
-          : line.split(/\s+/)[0] === running
-            ? line
-            : running;
-        const title = idle ? this.shellName : running;
+        const command = idle ? undefined : line || plausibleCommand(running);
+        const title = idle
+          ? this.shellName
+          : (command?.split(/\s+/)[0] ?? plausibleCommand(running) ?? running);
 
         if (tab.command === command && tab.title === title) continue;
         this.update(session.id, (s) => ({
@@ -159,12 +173,16 @@ export class ElectronSessionDriver extends SessionStore {
   private receive(tabId: string, data: string) {
     const stream = this.stream(tabId);
 
-    // The shell is up once it has said anything; now it can be typed into.
+    // Restart the settle clock on every chunk; the command goes in once the
+    // shell has finished printing its prompt.
     const queued = this.autorun.get(tabId);
     if (queued) {
-      this.autorun.delete(tabId);
-      this.submitted.set(tabId, queued);
-      this.bridge.pty.write(tabId, `${queued}\r`);
+      window.clearTimeout(queued.timer);
+      queued.timer = window.setTimeout(() => {
+        this.autorun.delete(tabId);
+        this.submitted.set(tabId, queued.command);
+        this.bridge.pty.write(tabId, `${queued.command}\r`);
+      }, SHELL_SETTLE_MS);
     }
 
     stream.buffer += data;
@@ -206,12 +224,16 @@ export class ElectronSessionDriver extends SessionStore {
       rows: 24,
     });
 
-    if (wanted && wanted !== this.shellName) this.autorun.set(tabId, wanted);
+    if (wanted && wanted !== this.shellName) {
+      this.autorun.set(tabId, { command: wanted, timer: 0 });
+    }
   }
 
   protected closeTerminal(tabId: string): void {
     const stream = this.streams.get(tabId);
     if (stream) window.clearTimeout(stream.settle);
+    const queued = this.autorun.get(tabId);
+    if (queued) window.clearTimeout(queued.timer);
     this.streams.delete(tabId);
     this.agents.delete(tabId);
     this.typing.delete(tabId);
@@ -226,15 +248,16 @@ export class ElectronSessionDriver extends SessionStore {
 
     if (stream.buffer) {
       // Whatever we already hold — restored scrollback, or output received
-      // earlier this run — is the complete history.
-      onData(stream.buffer);
+      // earlier this run — is the complete history. Sanitised, because raw
+      // replay re-answers terminal queries and re-arms modes; see history.ts.
+      onData(sanitizeHistory(stream.buffer));
     } else {
       // Nothing locally: this window reloaded and the main process still has
       // the buffer for a pty that never stopped.
       void this.bridge.pty.replay(tabId).then((history) => {
         if (history && stream.listeners.has(onData)) {
           stream.buffer = history;
-          onData(history);
+          onData(sanitizeHistory(history));
         }
       });
     }

@@ -24,16 +24,63 @@ foreground process. That is the same signal a terminal uses to title its tabs,
 and it is the truth rather than a guess: it knows `vim` is open, not merely
 that `vim` was once typed.
 
-The foreground process gives a bare name, which loses arguments — and
-arguments are frequently the whole point, since `claude --continue` resumes a
-conversation where `claude` starts a fresh one. So the driver also reassembles
-the line being typed, and when that line's first word matches the foreground
-process it keeps the full line. A stray control character clears the buffer,
-because whatever is half-typed inside an interactive program is not a command.
+The foreground process answers *whether* something is running. It is a poor
+answer to *what*, because a process can rename itself — Claude Code reports as
+its own version number, so trusting the name recorded `2.1.273` as the command
+and restore typed that into a shell.
+
+So the line the user actually submitted wins, and the process name is only a
+fallback for a tab nobody typed in. That is better for wrappers too: `npm run
+dev` is a more useful thing to restore than `node`. A stray control character
+clears the typed buffer, because whatever is half-typed inside an interactive
+program is not a command — and anything that could not be typed at a prompt is
+rejected outright, on save and again on load, since a workspace written by an
+earlier build can hold one.
 
 On restore the command is **typed into a fresh shell** rather than replacing
 it. Replacing the shell would mean the tab vanishes the moment the command
 exits, and it would lose quoting that the shell parses for free.
+
+It is typed once the shell has been **quiet for 350 ms**, not on its first
+byte. The first chunk is usually a partial line or terminal setup rather than a
+prompt, and characters sent then are mangled by a line editor that is not ready
+yet.
+
+## Overrides, because only the agent knows how to resume itself
+
+A restored `claude` that opens a blank conversation is a restored tab with no
+value. So captured commands are rewritten on the way back in, from a mapping in
+Settings → Restoring a session:
+
+```
+claude = claude --continue
+```
+
+This is a mapping rather than something the app is clever about, because the
+resume flag is the agent's business and guessing it for tools we have never
+seen would be worse than asking.
+
+**A limitation to know:** `--continue` resumes the most recent conversation *in
+that directory*. Two claude tabs in the same directory will both resume the
+same one. Targeting a specific conversation needs its session id, which means
+capturing something the agent does not currently tell us.
+
+## Replayed scrollback is not inert
+
+Restoring a pane means replaying recorded output into a fresh terminal, and
+that output contains escape sequences, not just text. Replayed raw, two things
+go wrong:
+
+- **Queries get answered again.** A Device Attributes query makes the terminal
+  reply *as input*; at a shell prompt that reply is echoed as literal
+  `^[[?1;2c`.
+- **Modes get re-armed.** `ESC[?1004h` turns focus reporting back on, so the
+  terminal starts sending `^[[O` to a shell that never asked for it.
+
+`session/history.ts` strips mode changes, device-attribute queries, status
+reports and OSC colour queries from history before replay, keeping colour,
+cursor movement and text. Live output is never filtered — a running program is
+entitled to set whatever modes it likes.
 
 ## The limitation that remains
 
