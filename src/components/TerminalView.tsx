@@ -30,18 +30,18 @@ const THEME = {
 };
 
 interface Props {
-  sessionId: string;
+  tabId: string;
   driver: SessionDriver;
 }
 
 /**
- * One xterm instance, torn down and rebuilt when the active session changes.
+ * One xterm instance per mounted tab.
  *
- * That is deliberate: it forces every session switch through the same
- * attach-and-replay path a real driver uses after a reconnect, so the
- * reattach model gets exercised constantly instead of only on a crash.
+ * Attach replays scrollback before streaming live, so re-mounting after a
+ * split, a tab move, or a session switch exercises exactly the path a real
+ * driver uses to recover from a dropped connection.
  */
-export function TerminalView({ sessionId, driver }: Props) {
+export function TerminalView({ tabId, driver }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,11 +49,9 @@ export function TerminalView({ sessionId, driver }: Props) {
     if (!host) return;
 
     const term = new Terminal({
-      fontFamily:
-        '"JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace',
+      fontFamily: '"JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace',
       fontSize: 13,
       lineHeight: 1.45,
-      letterSpacing: 0,
       cursorBlink: true,
       cursorStyle: 'bar',
       allowProposedApi: true,
@@ -65,9 +63,8 @@ export function TerminalView({ sessionId, driver }: Props) {
     term.loadAddon(fit);
     term.open(host);
 
-    // WebGL is the fast path, but it fails on some Linux GPU drivers and
-    // inside VMs. Falling back to the DOM renderer is the whole reason this
-    // is wrapped: a dropped frame rate beats a blank terminal.
+    // WebGL is the fast path but fails on some Linux GPU drivers and in VMs.
+    // A dropped frame rate beats a blank terminal.
     try {
       term.loadAddon(new WebglAddon());
     } catch {
@@ -76,26 +73,46 @@ export function TerminalView({ sessionId, driver }: Props) {
 
     fit.fit();
 
-    const detach = driver.attach(sessionId, (chunk) => term.write(chunk));
-    const typed = term.onData((data) => driver.write(sessionId, data));
-
-    const observer = new ResizeObserver(() => {
-      try {
-        fit.fit();
-        driver.resize(sessionId, term.cols, term.rows);
-      } catch {
-        // Fires when the pane is hidden and has zero size.
+    // Escape interrupts the agent rather than reaching the process. Agents
+    // treat a bare ESC as a cancel, and this is the one keybinding users reach
+    // for without thinking — so it is worth taking away from the PTY.
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type === 'keydown' && event.key === 'Escape') {
+        driver.interrupt(tabId);
+        return false;
       }
+      return true;
+    });
+
+    const detach = driver.attach(tabId, (chunk) => term.write(chunk));
+    const typed = term.onData((data) => driver.write(tabId, data));
+
+    // Fitting resizes the DOM, which re-triggers the observer. Deferring the
+    // work to the next frame breaks that feedback loop — otherwise every
+    // split and splitter drag throws "ResizeObserver loop completed with
+    // undelivered notifications".
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        try {
+          fit.fit();
+          driver.resize(tabId, term.cols, term.rows);
+        } catch {
+          // Fires when the pane is hidden and has zero size.
+        }
+      });
     });
     observer.observe(host);
 
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
       typed.dispose();
       detach();
       term.dispose();
     };
-  }, [sessionId, driver]);
+  }, [tabId, driver]);
 
   return <div className="terminal-host" ref={hostRef} />;
 }

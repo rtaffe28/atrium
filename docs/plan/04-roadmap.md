@@ -6,8 +6,14 @@ only make sense once the earlier ones have been felt.
 ### ✅ Stage 1 — UI mock in a browser
 
 Vite + React + xterm.js, `MockDriver` playing scripted agent output. No
-processes, no Electron. **Done.** Iterate here as long as it is still teaching
-you something about the interface.
+processes, no Electron. Iterate here as long as it is still teaching you
+something about the interface.
+
+Shipped: session rail with derived state, split panes as a binary tree,
+tabs (terminal and browser) that drag to reorder, to split, or onto the rail
+to become their own session, resizable splitters, Escape-to-interrupt,
+`×`-to-kill, and system notifications with synthesised sounds. See
+`05-ui-model.md`.
 
 ### Stage 2 — see a real PTY, outside this project
 
@@ -52,6 +58,7 @@ daemon with evidence in hand.
 
 - Windows port (forces the abstraction honest — do it before Linux).
 - Linux port (mostly free once Windows is done).
-- Diff review pane per session.
-- Command palette.
-- Notifications when a session enters `waiting`.
+- Diff review pane per session, as a third tab kind.
+- Command palette (⌘K is already reserved in the title bar).
+- Persist layout across reloads.
+- Real `<webview>` browser tabs once Electron lands, replacing the iframe.

@@ -19,12 +19,22 @@ src/
   session/
     types.ts    the SessionDriver seam — UI above, platforms below
     mock.ts     scripted sessions, no processes
+  layout/
+    tree.ts     split/collapse operations on the pane tree
+  dnd/
+    DragContext.tsx   pointer-based drag with prioritised drop zones
   components/
     TitleBar.tsx      custom chrome; per-platform window-control insets
-    Sidebar.tsx       the session rail
+    Sidebar.tsx       the session rail; also a drop target
+    PaneTree.tsx      recursive splits with draggable splitters
+    PaneView.tsx      one leaf: tab bar + active tab + edge drop zones
+    TabBar.tsx        tabs, drag handles, close buttons
     TerminalView.tsx  xterm.js, WebGL with a DOM fallback
+    BrowserView.tsx   URL bar + iframe (becomes <webview> under Electron)
+  notifications.ts    state diffing, synthesised chimes
   App.tsx       swap MockDriver here to graduate to real PTYs
-docs/plan/      overview, terminal primer, decisions, architecture, roadmap
+docs/plan/      overview, terminal primer, decisions, architecture, roadmap,
+                UI model
 ```
 
 ## Reading order
@@ -34,3 +44,4 @@ docs/plan/      overview, terminal primer, decisions, architecture, roadmap
 3. [`docs/plan/02-decisions.md`](docs/plan/02-decisions.md) — Electron vs Tauri, why not fork cmux
 4. [`docs/plan/03-architecture.md`](docs/plan/03-architecture.md) — the seam, cross-platform table
 5. [`docs/plan/04-roadmap.md`](docs/plan/04-roadmap.md) — the eight stages
+6. [`docs/plan/05-ui-model.md`](docs/plan/05-ui-model.md) — sessions, panes, tabs, drag, notifications

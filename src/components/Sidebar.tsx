@@ -1,8 +1,10 @@
-import type { SessionMeta, SessionStatus } from '../session/types';
+import { useEffect, useId, useRef } from 'react';
+import { useDrag } from '../dnd/context';
+import { deriveSessionState, type Session, type SessionState } from '../session/types';
 
-const STATUS_LABEL: Record<SessionStatus, string> = {
+const STATUS_LABEL: Record<SessionState, string> = {
   idle: 'Idle',
-  running: 'Working',
+  working: 'Working',
   waiting: 'Needs you',
   done: 'Done',
   error: 'Failed',
@@ -16,17 +18,35 @@ function relativeTime(ts: number): string {
 }
 
 interface Props {
-  sessions: SessionMeta[];
+  sessions: Session[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onKill: (id: string) => void;
 }
 
-export function Sidebar({ sessions, activeId, onSelect, onCreate }: Props) {
-  const needsAttention = sessions.filter((s) => s.status === 'waiting').length;
+export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Props) {
+  const { register, action } = useDrag();
+  const railRef = useRef<HTMLElement>(null);
+  const zoneId = useId();
+
+  // Dropping a tab on the rail promotes it into a session of its own.
+  useEffect(
+    () =>
+      register({
+        id: `rail:${zoneId}`,
+        priority: 3,
+        getRect: () => railRef.current?.getBoundingClientRect() ?? null,
+        resolve: () => ({ kind: 'rail' }),
+      }),
+    [register, zoneId],
+  );
+
+  const railActive = action?.kind === 'rail';
+  const needsAttention = sessions.filter((s) => deriveSessionState(s) === 'waiting').length;
 
   return (
-    <nav className="sidebar">
+    <nav className={`sidebar${railActive ? ' is-drop-target' : ''}`} ref={railRef}>
       <header className="sidebar-head">
         <div className="sidebar-title">
           Sessions
@@ -42,41 +62,59 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate }: Props) {
       </header>
 
       <ul className="session-list">
-        {sessions.map((session) => (
-          <li key={session.id}>
-            <button
-              className={`session-row${session.id === activeId ? ' is-active' : ''}`}
-              onClick={() => onSelect(session.id)}
-            >
-              <span className={`dot dot-${session.status}`} aria-hidden />
-              <span className="session-body">
-                <span className="session-title">{session.title}</span>
-                <span className="session-meta">
-                  <span className="branch">{session.branch}</span>
-                  <span className="sep">·</span>
-                  <span>{relativeTime(session.createdAt)}</span>
-                </span>
-                {session.diff.files > 0 && (
-                  <span className="session-diff">
-                    <span className="added">+{session.diff.added}</span>
-                    <span className="removed">−{session.diff.removed}</span>
-                    <span className="files">
-                      {session.diff.files} file{session.diff.files === 1 ? '' : 's'}
+        {sessions.map((session) => {
+          const state = deriveSessionState(session);
+          const tabCount = Object.keys(session.tabs).length;
+          return (
+            <li key={session.id}>
+              <div
+                className={`session-row${session.id === activeId ? ' is-active' : ''}`}
+                onClick={() => onSelect(session.id)}
+              >
+                <span className={`dot dot-${state}`} aria-hidden />
+                <span className="session-body">
+                  <span className="session-title">{session.title}</span>
+                  <span className="session-meta">
+                    <span className="branch">{session.branch}</span>
+                    <span className="sep">·</span>
+                    <span>
+                      {tabCount} tab{tabCount === 1 ? '' : 's'}
                     </span>
+                    <span className="sep">·</span>
+                    <span>{relativeTime(session.createdAt)}</span>
                   </span>
-                )}
-              </span>
-              <span className={`status-tag status-${session.status}`}>
-                {STATUS_LABEL[session.status]}
-              </span>
-            </button>
-          </li>
-        ))}
+                  {session.diff.files > 0 && (
+                    <span className="session-diff">
+                      <span className="added">+{session.diff.added}</span>
+                      <span className="removed">−{session.diff.removed}</span>
+                      <span className="files">
+                        {session.diff.files} file{session.diff.files === 1 ? '' : 's'}
+                      </span>
+                    </span>
+                  )}
+                </span>
+                <span className={`status-tag status-${state}`}>{STATUS_LABEL[state]}</span>
+                <button
+                  className="session-kill"
+                  title="Kill session"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onKill(session.id);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
+
+      {railActive && <div className="rail-drop-hint">Drop to start a new session</div>}
 
       <footer className="sidebar-foot">
         <span className="dim">mock driver</span>
-        <span className="dim">no processes running</span>
+        <span className="dim">esc interrupts</span>
       </footer>
     </nav>
   );

@@ -1,4 +1,4 @@
-import type { SessionMeta } from '../session/types';
+import type { Session } from '../session/types';
 
 /**
  * The custom title bar.
@@ -23,10 +23,12 @@ function detectPlatform(): Platform {
 }
 
 interface Props {
-  session: SessionMeta | null;
+  session: Session | null;
+  permission: NotificationPermission;
+  onEnableNotifications: () => void;
 }
 
-export function TitleBar({ session }: Props) {
+export function TitleBar({ session, permission, onEnableNotifications }: Props) {
   const platform = detectPlatform();
 
   return (
@@ -48,6 +50,11 @@ export function TitleBar({ session }: Props) {
       </div>
 
       <div className="titlebar-trail">
+        {permission !== 'granted' && (
+          <button className="ghost-button tiny" onClick={onEnableNotifications}>
+            Enable alerts
+          </button>
+        )}
         <kbd>{platform === 'mac' ? '⌘' : 'Ctrl'}K</kbd>
       </div>
     </header>

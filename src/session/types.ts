@@ -6,16 +6,54 @@
  * library that already did the work).
  *
  * Today the only implementation is MockDriver. Later there will be a
- * NodePtyDriver that talks to a real pseudo-terminal in the Electron main
+ * NodePtyDriver that talks to real pseudo-terminals in the Electron main
  * process. The UI must never learn the difference.
  */
 
-export type SessionStatus =
-  | 'idle'     // process alive, nothing happening
-  | 'running'  // agent is working
-  | 'waiting'  // agent asked a question, needs the human
-  | 'done'     // finished cleanly
-  | 'error';   // exited non-zero
+/** What an agent is doing right now. The rail exists to surface this. */
+export type AgentState = 'working' | 'waiting' | 'done' | 'error';
+
+/** A session's state is derived from its agent tabs — see deriveSessionState. */
+export type SessionState = AgentState | 'idle';
+
+export type TabKind = 'terminal' | 'browser';
+
+export interface Tab {
+  id: string;
+  kind: TabKind;
+  title: string;
+  /** Terminal tabs only. Absent means a plain shell, not an agent. */
+  agent?: string;
+  /** Terminal tabs running an agent. Drives the rail and notifications. */
+  agentState?: AgentState;
+  /** Browser tabs only. */
+  url?: string;
+}
+
+/** A pane: one tab bar and whichever of its tabs is active. */
+export interface TabGroup {
+  id: string;
+  tabIds: string[];
+  activeTabId: string | null;
+}
+
+/**
+ * The split layout, as a binary tree.
+ *
+ * Leaves are tab groups. Dragging a tab to a pane's edge splits that leaf into
+ * a branch; closing the last tab in a group collapses the branch back. This is
+ * the VS Code / iTerm model and it is what makes "drag two tabs side by side"
+ * fall out for free instead of being a special case.
+ */
+export type LayoutNode =
+  | { type: 'leaf'; groupId: string }
+  | {
+      type: 'split';
+      direction: 'row' | 'column';
+      children: [LayoutNode, LayoutNode];
+      /** Fractions of the parent, summing to 1. */
+      sizes: [number, number];
+    };
 
 export interface DiffStat {
   files: number;
@@ -23,55 +61,86 @@ export interface DiffStat {
   removed: number;
 }
 
-export interface SessionMeta {
+export interface Session {
   id: string;
   title: string;
-  agent: string;      // 'claude' | 'codex' | 'shell'
-  cwd: string;        // absolute path to the worktree
+  cwd: string;
   branch: string;
-  status: SessionStatus;
   createdAt: number;
   diff: DiffStat;
+  layout: LayoutNode;
+  groups: Record<string, TabGroup>;
+  tabs: Record<string, Tab>;
 }
 
 export interface CreateSessionOptions {
   title: string;
-  agent: string;
   cwd: string;
   branch: string;
+  /** Seed the session with this tab instead of a fresh agent terminal. */
+  adopt?: Tab;
 }
 
-/** Bytes flowing out of a session, as they would arrive from a PTY. */
+/** Bytes flowing out of a tab, as they would arrive from a PTY. */
 export type DataHandler = (chunk: string) => void;
 export type Unsubscribe = () => void;
 
-export interface SessionDriver {
-  /** Current metadata for every session. */
-  list(): SessionMeta[];
+/** Where a dragged tab landed. */
+export type DropAction =
+  | { kind: 'tabbar'; groupId: string; index: number }
+  | { kind: 'split'; groupId: string; edge: 'left' | 'right' | 'top' | 'bottom' }
+  | { kind: 'rail' };
 
-  /** Fires whenever any session's metadata changes. */
-  subscribe(handler: (sessions: SessionMeta[]) => void): Unsubscribe;
+export interface SessionDriver {
+  list(): Session[];
+  subscribe(handler: (sessions: Session[]) => void): Unsubscribe;
 
   /**
-   * Attach to a session's output stream.
+   * Attach to a terminal tab's output stream.
    *
    * Replays scrollback first, then streams live. A real driver would take a
-   * sequence number here so reattach after a disconnect is idempotent; the
-   * mock replays everything because it can.
+   * sequence number so reattach after a disconnect is idempotent; the mock
+   * replays everything because it can afford to.
    */
-  attach(id: string, onData: DataHandler): Unsubscribe;
+  attach(tabId: string, onData: DataHandler): Unsubscribe;
 
-  /** Keystrokes from the terminal, headed for the process's stdin. */
-  write(id: string, data: string): void;
+  /** Keystrokes headed for the process's stdin. */
+  write(tabId: string, data: string): void;
 
   /** SIGWINCH on Unix, ResizePseudoConsole on Windows. */
-  resize(id: string, cols: number, rows: number): void;
+  resize(tabId: string, cols: number, rows: number): void;
 
   /** SIGINT to the process group on Unix, 0x03 / CTRL_C_EVENT on Windows. */
-  interrupt(id: string): void;
+  interrupt(tabId: string): void;
 
-  /** killpg on Unix, Job Object close on Windows. Kills the whole tree. */
-  kill(id: string): void;
+  createSession(options: CreateSessionOptions): Session;
+  killSession(sessionId: string): void;
 
-  create(options: CreateSessionOptions): Promise<SessionMeta>;
+  addTab(sessionId: string, groupId: string, kind: TabKind): Tab;
+  closeTab(sessionId: string, tabId: string): void;
+  activateTab(sessionId: string, groupId: string, tabId: string): void;
+  setTabUrl(sessionId: string, tabId: string, url: string): void;
+
+  /** Resolve a completed tab drag. */
+  moveTab(sessionId: string, tabId: string, action: DropAction): void;
+  /** Persist a splitter drag. */
+  setSizes(sessionId: string, path: number[], sizes: [number, number]): void;
+}
+
+/**
+ * A session is as urgent as its most urgent agent tab.
+ *
+ * "Needs input" outranks everything: it is the only state where the human is
+ * the bottleneck, so it must win the rail's attention.
+ */
+export function deriveSessionState(session: Session): SessionState {
+  const states = Object.values(session.tabs)
+    .map((t) => t.agentState)
+    .filter((s): s is AgentState => s !== undefined);
+
+  if (states.length === 0) return 'idle';
+  if (states.includes('waiting')) return 'waiting';
+  if (states.includes('working')) return 'working';
+  if (states.includes('error')) return 'error';
+  return 'done';
 }
