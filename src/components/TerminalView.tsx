@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
+import { useSettings } from '../settings/context';
 import type { SessionDriver } from '../session/types';
 
 const THEME = {
@@ -43,6 +44,8 @@ interface Props {
  */
 export function TerminalView({ tabId, driver }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const { settings } = useSettings();
+  const fontSize = settings.terminalFontSize;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -50,7 +53,7 @@ export function TerminalView({ tabId, driver }: Props) {
 
     const term = new Terminal({
       fontFamily: '"JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace',
-      fontSize: 13,
+      fontSize,
       lineHeight: 1.45,
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -112,7 +115,7 @@ export function TerminalView({ tabId, driver }: Props) {
       detach();
       term.dispose();
     };
-  }, [tabId, driver]);
+  }, [tabId, driver, fontSize]);
 
   return <div className="terminal-host" ref={hostRef} />;
 }

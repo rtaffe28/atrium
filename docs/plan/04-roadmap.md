@@ -48,17 +48,32 @@ product, proven in isolation.
 Wire cols/rows through and watch `vim` go from broken to correct. Now SIGWINCH
 means something.
 
-### Stage 5 — `NodePtyDriver` in Atrium
+### ✅ Stage 5 — real PTYs in Atrium
 
-Implement `SessionDriver` against node-pty inside an `ElectronHost`, and swap
-the one line in `App.tsx`. Nothing above the seam should change. If it does,
-the seam was wrong — and `src/host/host.test.tsx` should catch it.
+Done, together with stage 6. `ElectronSessionDriver` implements `SessionDriver`
+against node-pty in the main process. Nothing above the seam changed — the
+session, tab and layout logic moved to `SessionStore`, which both drivers now
+share, and the mock and the real thing differ only in where bytes come from.
 
-### Stage 6 — wrap in Electron
+### ✅ Stage 6 — wrap in Electron
 
-Frameless window, `titleBarStyle: 'hidden'` + `titleBarOverlay`. It will break
-when you launch the built app instead of `npm run dev` — that is the macOS PATH
-problem from `03-architecture.md`, and you will already know the fix.
+Frameless window with `titleBarStyle: 'hidden'` plus `titleBarOverlay` off
+macOS. The login-shell environment is resolved once at startup, so the PATH
+problem is handled before it can bite.
+
+**The trap this actually sprang:** a Vite dev server left running for four
+hours across a refactor that renamed and deleted files served a stale module
+graph. The window came up blank with no error anywhere — the HTML ran, the
+preload bridge was present, and `main.tsx` simply never executed. Restarting
+the dev server fixed it. If an Electron window is blank and the console is
+silent, suspect the dev server before the app.
+
+### ✅ Stage 6.5 — settings and persistence
+
+A settings panel (⌘,) covering the default command for new sessions, alert
+sounds (off by default), which states notify, and terminal font size. The
+workspace persists and restores across restarts — see `07-persistence.md`,
+including what restore cannot do.
 
 ### Stage 7 — worktrees
 

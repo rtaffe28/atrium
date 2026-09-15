@@ -6,18 +6,23 @@ import { useHost } from './host/context';
 import { MockHost } from './host/mock';
 import type { Host } from './host/types';
 import { useAgentNotifications } from './notifications';
+import { SettingsProvider } from './settings/SettingsProvider';
+import { useSettings } from './settings/context';
 import { PaneTree } from './components/PaneTree';
+import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import type { DropAction, Session } from './session/types';
 
 export default function App({ host }: { host?: Host }) {
   // Swapping this one line for ElectronHost is the entire graduation from
-  // mock to product. Tests inject their own.
+  // mock to product. Tests and main.tsx inject their own.
   const resolved = useMemo(() => host ?? new MockHost(), [host]);
   return (
     <HostProvider host={resolved}>
-      <Workspace />
+      <SettingsProvider>
+        <Workspace />
+      </SettingsProvider>
     </HostProvider>
   );
 }
@@ -25,14 +30,15 @@ export default function App({ host }: { host?: Host }) {
 function Workspace() {
   const host = useHost();
   const driver = host.sessions;
+  const { settings } = useSettings();
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [permission, setPermission] = useState(host.notify.permission());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => driver.subscribe(setSessions), [driver]);
 
-  useAgentNotifications(sessions, permission === 'granted');
+  useAgentNotifications(sessions);
 
   // activeId is only a preference. Resolving it during render means a killed
   // session falls back to the next one without an effect round-trip.
@@ -40,12 +46,29 @@ function Workspace() {
 
   const createSession = useCallback(() => {
     const created = driver.createSession({
-      title: 'New session',
-      cwd: '~/git/atrium',
-      branch: `ryan/session-${Math.random().toString(36).slice(2, 7)}`,
+      title: settings.defaultCommand.trim() || 'Shell',
+      cwd: '~',
+      branch: 'main',
+      command: settings.defaultCommand,
     });
     setActiveId(created.id);
-  }, [driver]);
+  }, [driver, settings.defaultCommand]);
+
+  // Persist the workspace shortly after it settles. Debounced because a
+  // splitter drag fires a change per frame, and writing the whole workspace
+  // sixty times a second would be absurd.
+  useEffect(() => {
+    if (!host.capabilities.persistence || sessions.length === 0) return;
+    const timer = window.setTimeout(() => {
+      void host.workspace.save({
+        version: 1,
+        sessions: driver.snapshot(),
+        activeId: active?.id ?? null,
+        scrollback: driver.scrollback(host.workspace.scrollbackBudget),
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [host, driver, sessions, active?.id]);
 
   const handleDrop = useCallback(
     (payload: DragPayload, action: DropAction) => {
@@ -56,9 +79,15 @@ function Workspace() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'n') {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      if (event.key.toLowerCase() === 'n') {
         event.preventDefault();
         createSession();
+      }
+      if (event.key === ',') {
+        event.preventDefault();
+        setSettingsOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -68,15 +97,11 @@ function Workspace() {
   return (
     <DragProvider onDrop={handleDrop}>
       <div className="app">
-        <TitleBar
-          session={active}
-          permission={permission}
-          onEnableNotifications={() => void host.notify.requestPermission().then(setPermission)}
-        />
+        <TitleBar session={active} onOpenSettings={() => setSettingsOpen(true)} />
         <div className="body">
           <Sidebar
             sessions={sessions}
-            activeId={activeId}
+            activeId={active?.id ?? null}
             onSelect={setActiveId}
             onCreate={createSession}
             onKill={(id) => driver.killSession(id)}
@@ -95,6 +120,7 @@ function Workspace() {
           </main>
         </div>
       </div>
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </DragProvider>
   );
 }

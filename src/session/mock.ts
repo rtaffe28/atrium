@@ -1,16 +1,5 @@
-import { removeLeaf, setSizesAt, splitLeaf } from '../layout/tree';
-import type {
-  AgentState,
-  CreateSessionOptions,
-  DataHandler,
-  DropAction,
-  LayoutNode,
-  Session,
-  SessionDriver,
-  Tab,
-  TabKind,
-  Unsubscribe,
-} from './types';
+import { SessionStore } from './store';
+import type { AgentState, DataHandler, Unsubscribe } from './types';
 
 const C = {
   reset: '\x1b[0m',
@@ -31,7 +20,6 @@ interface Beat {
 }
 
 const prompt = (cwd: string) => `${C.dim}${cwd}${C.reset} ${C.green}❯${C.reset} `;
-
 const banner = `${C.magenta}✻${C.reset} ${C.bold}Atrium${C.reset} ${C.dim}· Opus 5${C.reset}\r\n\r\n`;
 
 function agentScript(cwd: string, task: string, files: string[]): Beat[] {
@@ -117,53 +105,19 @@ interface Stream {
   timers: number[];
 }
 
-let counter = 0;
-const uid = (prefix: string) => `${prefix}${++counter}`;
-
-export class MockDriver implements SessionDriver {
-  private sessions = new Map<string, Session>();
+/**
+ * A SessionDriver that never touches a process.
+ *
+ * Output is a pre-written script played back on timers, which is enough to
+ * design against: real text, real ANSI colours, real status transitions, and
+ * sessions that finish at different times so the rail actually moves.
+ */
+export class MockDriver extends SessionStore {
   private streams = new Map<string, Stream>();
-  private listeners = new Set<(s: Session[]) => void>();
 
   constructor() {
+    super();
     this.seed();
-  }
-
-  // ── construction helpers ───────────────────────────────────────────────
-
-  private makeTab(kind: TabKind, partial: Partial<Tab> = {}): Tab {
-    return {
-      id: uid('t'),
-      kind,
-      title: kind === 'browser' ? 'New tab' : 'zsh',
-      ...partial,
-    };
-  }
-
-  private makeSession(
-    title: string,
-    branch: string,
-    tabs: Tab[],
-    ageMinutes: number,
-  ): Session {
-    const groupId = uid('g');
-    return {
-      id: uid('s'),
-      title,
-      cwd: '~/git/atrium',
-      branch,
-      createdAt: Date.now() - ageMinutes * 60_000,
-      diff: { files: 0, added: 0, removed: 0 },
-      layout: { type: 'leaf', groupId },
-      groups: {
-        [groupId]: {
-          id: groupId,
-          tabIds: tabs.map((t) => t.id),
-          activeTabId: tabs[0]?.id ?? null,
-        },
-      },
-      tabs: Object.fromEntries(tabs.map((t) => [t.id, t])),
-    };
   }
 
   private seed() {
@@ -171,17 +125,17 @@ export class MockDriver implements SessionDriver {
 
     const a1 = this.makeTab('terminal', { title: 'claude', agent: 'claude' });
     const a2 = this.makeTab('terminal', { title: 'dev server' });
-    const s1 = this.makeSession('Session rail + status dots', 'ryan/session-rail', [a1, a2], 14);
+    const s1 = this.makeSession('Session rail + status dots', 'ryan/session-rail', [a1, a2], 14, cwd);
 
     const b1 = this.makeTab('terminal', { title: 'claude', agent: 'claude' });
     const b2 = this.makeTab('browser', { title: 'Preview', url: 'http://localhost:5173/' });
-    const s2 = this.makeSession('Auth flow migration', 'ryan/auth-migration', [b1, b2], 6);
+    const s2 = this.makeSession('Auth flow migration', 'ryan/auth-migration', [b1, b2], 6, cwd);
 
     const c1 = this.makeTab('terminal', { title: 'build', agent: 'shell' });
-    const s3 = this.makeSession('Production build', 'main', [c1], 3);
+    const s3 = this.makeSession('Production build', 'main', [c1], 3, cwd);
 
     const d1 = this.makeTab('terminal', { title: 'claude', agent: 'claude' });
-    const s4 = this.makeSession('WebGL renderer spike', 'ryan/webgl-spike', [d1], 31);
+    const s4 = this.makeSession('WebGL renderer spike', 'ryan/webgl-spike', [d1], 31, cwd);
 
     for (const session of [s1, s2, s3, s4]) this.sessions.set(session.id, session);
 
@@ -198,8 +152,6 @@ export class MockDriver implements SessionDriver {
       'package.json',
     ]));
   }
-
-  // ── stream plumbing ────────────────────────────────────────────────────
 
   private stream(tabId: string): Stream {
     let stream = this.streams.get(tabId);
@@ -241,32 +193,33 @@ export class MockDriver implements SessionDriver {
     }
   }
 
-  private update(sessionId: string, fn: (s: Session) => Session) {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    this.sessions.set(sessionId, fn(session));
-    this.notify();
+  protected openTerminal(tabId: string, cwd: string, agent?: string): void {
+    if (agent) {
+      const session = this.sessionOfTab(tabId);
+      this.play(session?.id ?? '', tabId, agentScript(cwd, 'new session', [
+        'src/session/pty.ts',
+        'electron/main.ts',
+      ]));
+      return;
+    }
+    this.play('', tabId, [{ after: 150, text: prompt(cwd) }]);
   }
 
-  private notify() {
-    const list = this.list();
-    for (const listener of this.listeners) listener(list);
+  protected primeScrollback(tabId: string, history: string): void {
+    if (history) this.stream(tabId).buffer = history;
   }
 
-  private sessionOfTab(tabId: string): Session | undefined {
-    return [...this.sessions.values()].find((s) => s.tabs[tabId]);
+  scrollback(budget: number): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [tabId, stream] of this.streams) {
+      if (stream.buffer) out[tabId] = stream.buffer.slice(-budget);
+    }
+    return out;
   }
 
-  // ── SessionDriver ──────────────────────────────────────────────────────
-
-  list(): Session[] {
-    return [...this.sessions.values()].sort((a, b) => b.createdAt - a.createdAt);
-  }
-
-  subscribe(handler: (s: Session[]) => void): Unsubscribe {
-    this.listeners.add(handler);
-    handler(this.list());
-    return () => this.listeners.delete(handler);
+  protected closeTerminal(tabId: string): void {
+    this.streams.get(tabId)?.timers.forEach((t) => window.clearTimeout(t));
+    this.streams.delete(tabId);
   }
 
   attach(tabId: string, onData: DataHandler): Unsubscribe {
@@ -312,236 +265,6 @@ export class MockDriver implements SessionDriver {
     this.update(session.id, (s) => ({
       ...s,
       tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentState: undefined } },
-    }));
-  }
-
-  createSession(options: CreateSessionOptions): Session {
-    const tab = options.adopt ?? this.makeTab('terminal', { title: 'claude', agent: 'claude' });
-    const session = this.makeSession(options.title, options.branch, [tab], 0);
-    session.cwd = options.cwd;
-    this.sessions.set(session.id, session);
-    this.notify();
-    if (!options.adopt) {
-      this.play(session.id, tab.id, agentScript(options.cwd, options.title.toLowerCase(), [
-        'src/session/pty.ts',
-        'electron/main.ts',
-      ]));
-    }
-    return session;
-  }
-
-  killSession(sessionId: string): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    for (const tabId of Object.keys(session.tabs)) {
-      const stream = this.streams.get(tabId);
-      stream?.timers.forEach((t) => window.clearTimeout(t));
-      this.streams.delete(tabId);
-    }
-    this.sessions.delete(sessionId);
-    this.notify();
-  }
-
-  addTab(sessionId: string, groupId: string, kind: TabKind): Tab {
-    const tab =
-      kind === 'browser'
-        ? this.makeTab('browser', { title: 'New tab', url: 'http://localhost:5173/' })
-        : this.makeTab('terminal', { title: 'zsh' });
-
-    this.update(sessionId, (session) => ({
-      ...session,
-      tabs: { ...session.tabs, [tab.id]: tab },
-      groups: {
-        ...session.groups,
-        [groupId]: {
-          ...session.groups[groupId],
-          tabIds: [...session.groups[groupId].tabIds, tab.id],
-          activeTabId: tab.id,
-        },
-      },
-    }));
-
-    const session = this.sessions.get(sessionId);
-    if (kind === 'terminal' && session) {
-      this.play(sessionId, tab.id, [{ after: 150, text: prompt(session.cwd) }]);
-    }
-    return tab;
-  }
-
-  closeTab(sessionId: string, tabId: string): void {
-    this.streams.get(tabId)?.timers.forEach((t) => window.clearTimeout(t));
-    this.streams.delete(tabId);
-
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const groupId = Object.keys(session.groups).find((g) =>
-      session.groups[g].tabIds.includes(tabId),
-    );
-    if (!groupId) return;
-
-    const remaining = session.groups[groupId].tabIds.filter((id) => id !== tabId);
-    const tabs = { ...session.tabs };
-    delete tabs[tabId];
-
-    // Last tab in a pane: drop the pane and collapse the split around it.
-    if (remaining.length === 0) {
-      const layout = removeLeaf(session.layout, groupId);
-      if (layout === null) {
-        this.killSession(sessionId);
-        return;
-      }
-      const groups = { ...session.groups };
-      delete groups[groupId];
-      this.update(sessionId, (s) => ({ ...s, tabs, groups, layout }));
-      return;
-    }
-
-    this.update(sessionId, (s) => ({
-      ...s,
-      tabs,
-      groups: {
-        ...s.groups,
-        [groupId]: {
-          ...s.groups[groupId],
-          tabIds: remaining,
-          activeTabId:
-            s.groups[groupId].activeTabId === tabId
-              ? remaining[remaining.length - 1]
-              : s.groups[groupId].activeTabId,
-        },
-      },
-    }));
-  }
-
-  activateTab(sessionId: string, groupId: string, tabId: string): void {
-    this.update(sessionId, (session) => ({
-      ...session,
-      groups: {
-        ...session.groups,
-        [groupId]: { ...session.groups[groupId], activeTabId: tabId },
-      },
-    }));
-  }
-
-  setTabUrl(sessionId: string, tabId: string, url: string): void {
-    this.update(sessionId, (session) => ({
-      ...session,
-      tabs: {
-        ...session.tabs,
-        [tabId]: {
-          ...session.tabs[tabId],
-          url,
-          title: url.replace(/^https?:\/\//, '').split('/')[0] || 'New tab',
-        },
-      },
-    }));
-  }
-
-  moveTab(sessionId: string, tabId: string, action: DropAction): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const fromGroupId = Object.keys(session.groups).find((g) =>
-      session.groups[g].tabIds.includes(tabId),
-    );
-    if (!fromGroupId) return;
-
-    // Dropped on the rail: the tab graduates into a session of its own.
-    if (action.kind === 'rail') {
-      const tab = session.tabs[tabId];
-      const onlyTab = session.groups[fromGroupId].tabIds.length === 1;
-      const onlyGroup = Object.keys(session.groups).length === 1;
-      if (onlyTab && onlyGroup) return; // already is its own session
-
-      this.detach(sessionId, fromGroupId, tabId);
-      const created = this.makeSession(tab.title, session.branch, [tab], 0);
-      created.cwd = session.cwd;
-      this.sessions.set(created.id, created);
-      this.notify();
-      return;
-    }
-
-    if (action.kind === 'tabbar') {
-      const sameGroup = fromGroupId === action.groupId;
-      const current = this.sessions.get(sessionId)!;
-      const source = current.groups[fromGroupId].tabIds.filter((id) => id !== tabId);
-      const targetIds = sameGroup ? source : [...current.groups[action.groupId].tabIds];
-      const index = Math.min(action.index, targetIds.length);
-      targetIds.splice(index, 0, tabId);
-
-      const groups = { ...current.groups };
-      groups[action.groupId] = {
-        ...groups[action.groupId],
-        tabIds: targetIds,
-        activeTabId: tabId,
-      };
-      if (!sameGroup) {
-        groups[fromGroupId] = {
-          ...groups[fromGroupId],
-          tabIds: source,
-          activeTabId: source[source.length - 1] ?? null,
-        };
-      }
-
-      let layout = current.layout;
-      if (!sameGroup && source.length === 0) {
-        layout = removeLeaf(current.layout, fromGroupId) ?? current.layout;
-        delete groups[fromGroupId];
-      }
-      this.update(sessionId, (s) => ({ ...s, groups, layout }));
-      return;
-    }
-
-    // Split: the dragged tab becomes a new pane on the chosen edge.
-    const onlyTabInGroup = session.groups[fromGroupId].tabIds.length === 1;
-    if (onlyTabInGroup && fromGroupId === action.groupId) return;
-
-    const newGroupId = uid('g');
-    this.detach(sessionId, fromGroupId, tabId);
-
-    const current = this.sessions.get(sessionId);
-    if (!current) return;
-    const anchor = current.groups[action.groupId] ? action.groupId : Object.keys(current.groups)[0];
-
-    this.update(sessionId, (s) => ({
-      ...s,
-      layout: splitLeaf(s.layout, anchor, newGroupId, action.edge),
-      groups: {
-        ...s.groups,
-        [newGroupId]: { id: newGroupId, tabIds: [tabId], activeTabId: tabId },
-      },
-    }));
-  }
-
-  /** Pull a tab out of its group, collapsing the pane if it was the last one. */
-  private detach(sessionId: string, groupId: string, tabId: string) {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    const remaining = session.groups[groupId].tabIds.filter((id) => id !== tabId);
-    const groups = { ...session.groups };
-    let layout = session.layout;
-
-    if (remaining.length === 0) {
-      layout = removeLeaf(session.layout, groupId) ?? session.layout;
-      delete groups[groupId];
-    } else {
-      groups[groupId] = {
-        ...groups[groupId],
-        tabIds: remaining,
-        activeTabId:
-          groups[groupId].activeTabId === tabId
-            ? remaining[remaining.length - 1]
-            : groups[groupId].activeTabId,
-      };
-    }
-    this.sessions.set(sessionId, { ...session, groups, layout });
-  }
-
-  setSizes(sessionId: string, path: number[], sizes: [number, number]): void {
-    this.update(sessionId, (session) => ({
-      ...session,
-      layout: setSizesAt(session.layout, path, sizes) as LayoutNode,
     }));
   }
 }

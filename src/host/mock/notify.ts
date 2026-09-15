@@ -62,14 +62,10 @@ export class WebNotify implements NotifyDriver {
 
   async requestPermission(): Promise<NotificationPermission> {
     if (typeof Notification === 'undefined') return 'denied';
-    const result = await Notification.requestPermission();
-    // Confirm the grant audibly, so the user learns sound works too.
-    if (result === 'granted') this.sound('done');
-    return result;
+    return Notification.requestPermission();
   }
 
   async post(notice: { kind: NotifyKind; title: string; body: string; tag: string }) {
-    this.sound(notice.kind);
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     new Notification(notice.title, {
       body: notice.body,

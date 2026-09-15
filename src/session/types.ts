@@ -77,6 +77,8 @@ export interface CreateSessionOptions {
   title: string;
   cwd: string;
   branch: string;
+  /** Command to run in the session's first tab. Blank means a plain shell. */
+  command?: string;
   /** Seed the session with this tab instead of a fresh agent terminal. */
   adopt?: Tab;
 }
@@ -120,6 +122,11 @@ export interface SessionDriver {
   closeTab(sessionId: string, tabId: string): void;
   activateTab(sessionId: string, groupId: string, tabId: string): void;
   setTabUrl(sessionId: string, tabId: string, url: string): void;
+
+  /** The workspace shape, ready to serialise. */
+  snapshot(): Session[];
+  /** Per-tab terminal history, trimmed to the host's budget. */
+  scrollback(budget: number): Record<string, string>;
 
   /** Resolve a completed tab drag. */
   moveTab(sessionId: string, tabId: string, action: DropAction): void;

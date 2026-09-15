@@ -23,7 +23,7 @@
  *     interchangeable, and what lets one test suite run against both.
  */
 
-import type { SessionDriver } from '../session/types';
+import type { Session, SessionDriver } from '../session/types';
 
 export type Unsubscribe = () => void;
 
@@ -48,6 +48,8 @@ export interface Capabilities {
   nativeNotifications: boolean;
   /** Frameless window with app-drawn chrome. */
   customChrome: boolean;
+  /** Restoring the workspace across restarts. */
+  persistence: boolean;
 }
 
 // ── surfaces ───────────────────────────────────────────────────────────────
@@ -135,6 +137,32 @@ export interface WindowDriver {
   subscribe(handler: (state: WindowState) => void): Unsubscribe;
 }
 
+// ── workspace persistence ──────────────────────────────────────────────────
+
+/**
+ * Everything needed to put the window back the way it was.
+ *
+ * Note what this cannot contain: the running processes. A pseudo-terminal is
+ * a child of the app, so quitting ends it. What survives is the *shape* of the
+ * workspace plus each terminal's scrollback, and on restore the commands are
+ * run again. Making the processes themselves outlive the app needs a detached
+ * daemon — see open question O1 in docs/plan/03-architecture.md.
+ */
+export interface PersistedWorkspace {
+  version: 1;
+  sessions: Session[];
+  activeId: string | null;
+  /** Per-tab terminal history, trimmed to a budget the host can store. */
+  scrollback: Record<string, string>;
+}
+
+export interface WorkspaceDriver {
+  load(): Promise<PersistedWorkspace | null>;
+  save(state: PersistedWorkspace): Promise<void>;
+  /** How much scrollback per tab this host is willing to keep. */
+  readonly scrollbackBudget: number;
+}
+
 // ── the host ───────────────────────────────────────────────────────────────
 
 export interface Host {
@@ -146,6 +174,7 @@ export interface Host {
   readonly files: FileDriver;
   readonly notify: NotifyDriver;
   readonly window: WindowDriver;
+  readonly workspace: WorkspaceDriver;
 }
 
 /** Thrown by a driver whose capability flag is false. */

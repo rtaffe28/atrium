@@ -13,6 +13,7 @@ import type {
 import { UnsupportedError } from '../types';
 import { WebNotify } from './notify';
 import { IframeSurfaces } from './surfaces';
+import { LocalStorageWorkspace } from './workspace';
 
 /** Platform detection stays here so no component ever sniffs a user agent. */
 function detectPlatform(): Platform {
@@ -104,6 +105,7 @@ export class MockHost implements Host {
   readonly files = new NoFiles();
   readonly notify = new WebNotify();
   readonly window = new BrowserWindowDriver();
+  readonly workspace = new LocalStorageWorkspace();
 
   readonly capabilities: Capabilities = {
     pty: false,
@@ -112,5 +114,6 @@ export class MockHost implements Host {
     files: false,
     nativeNotifications: typeof Notification !== 'undefined',
     customChrome: false,
+    persistence: true,
   };
 }

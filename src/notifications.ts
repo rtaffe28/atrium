@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useHost } from './host/context';
+import { useSettings } from './settings/context';
 import type { AgentState, Session } from './session/types';
 import type { NotifyKind } from './host/types';
 
@@ -20,8 +21,9 @@ const COPY: Partial<Record<AgentState, (session: string) => string>> = {
   error: (session) => `${session} failed`,
 };
 
-export function useAgentNotifications(sessions: Session[], enabled: boolean) {
+export function useAgentNotifications(sessions: Session[]) {
   const host = useHost();
+  const { settings } = useSettings();
   const previous = useRef<Map<string, AgentState | undefined>>(new Map());
   const primed = useRef(false);
 
@@ -38,15 +40,20 @@ export function useAgentNotifications(sessions: Session[], enabled: boolean) {
       return;
     }
 
-    if (enabled) {
-      for (const session of sessions) {
-        for (const tab of Object.values(session.tabs)) {
-          const before = previous.current.get(tab.id);
-          const after = tab.agentState;
-          if (!after || after === before || after === 'working') continue;
+    for (const session of sessions) {
+      for (const tab of Object.values(session.tabs)) {
+        const before = previous.current.get(tab.id);
+        const after = tab.agentState;
+        if (!after || after === before || after === 'working') continue;
+        if (!settings.notifyOn[after]) continue;
 
-          const headline = COPY[after];
-          if (!headline) continue;
+        const headline = COPY[after];
+        if (!headline) continue;
+
+        // Sound and notification are independent switches, so each is asked
+        // for separately rather than one implying the other.
+        if (settings.sounds) host.notify.sound(after as NotifyKind);
+        if (settings.notifications) {
           void host.notify.post({
             kind: after as NotifyKind,
             title: headline(session.title),
@@ -57,5 +64,5 @@ export function useAgentNotifications(sessions: Session[], enabled: boolean) {
       }
     }
     previous.current = current;
-  }, [host, sessions, enabled]);
+  }, [host, sessions, settings]);
 }

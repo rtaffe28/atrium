@@ -20,11 +20,10 @@ import type { Session } from '../session/types';
 
 interface Props {
   session: Session | null;
-  permission: NotificationPermission;
-  onEnableNotifications: () => void;
+  onOpenSettings: () => void;
 }
 
-export function TitleBar({ session, permission, onEnableNotifications }: Props) {
+export function TitleBar({ session, onOpenSettings }: Props) {
   const host = useHost();
   const platform = host.window.platform();
   const insets = host.window.chromeInsets();
@@ -56,12 +55,14 @@ export function TitleBar({ session, permission, onEnableNotifications }: Props) 
       </div>
 
       <div className="titlebar-trail">
-        {permission !== 'granted' && (
-          <button className="ghost-button tiny" onClick={onEnableNotifications}>
-            Enable alerts
-          </button>
-        )}
-        <kbd>{platform === 'mac' ? '⌘' : 'Ctrl'}K</kbd>
+        <button
+          className="icon-button subtle"
+          onClick={onOpenSettings}
+          title={`Settings (${platform === 'mac' ? '⌘' : 'Ctrl'},)`}
+          aria-label="Settings"
+        >
+          ⚙
+        </button>
       </div>
     </header>
   );
