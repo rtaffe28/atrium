@@ -1,4 +1,4 @@
-import { removeLeaf, setSizesAt, splitLeaf } from '../layout/tree';
+import { leafGroupIds, removeLeaf, setSizesAt, splitLeaf } from '../layout/tree';
 import type {
   CreateSessionOptions,
   DataHandler,
@@ -13,6 +13,22 @@ import type {
 
 let counter = 0;
 export const uid = (prefix: string) => `${prefix}${++counter}`;
+
+/**
+ * Push the id counter past every id in a restored workspace.
+ *
+ * The counter starts at zero each launch, but a restored session carries ids
+ * minted by the *previous* run. Without this the first new pane after a
+ * restart is handed an id that is already in use — and because groups are
+ * keyed by id, creating it silently overwrites the existing pane and takes its
+ * tabs with it. The tab has not been deleted; its group was clobbered.
+ */
+export function reserveIds(ids: Iterable<string>): void {
+  for (const id of ids) {
+    const n = Number(id.replace(/^[^0-9]*/, ''));
+    if (Number.isFinite(n) && n > counter) counter = n;
+  }
+}
 
 /**
  * Sessions, tabs and pane layout — the part that is identical on every host.
@@ -53,8 +69,89 @@ export abstract class SessionStore implements SessionDriver {
    * the app. Their scrollback is restored so the pane still reads as continuous,
    * and the command that created each tab runs again.
    */
+  /**
+   * Make a restored session internally consistent.
+   *
+   * A workspace file written by a buggy build outlives the bug, so restore has
+   * to cope with one rather than trusting what it reads. Three things can be
+   * wrong: a pane in the layout with no group, a group holding tabs but absent
+   * from the layout, and a tab in no pane at all. Each is repaired toward
+   * keeping the tab — losing a pane arrangement is annoying, losing a terminal
+   * is not recoverable.
+   */
+  private sanitize(session: Session): Session {
+    let layout = session.layout;
+    const groups = { ...session.groups };
+
+    // Panes referring to groups that no longer exist.
+    for (const groupId of leafGroupIds(layout)) {
+      if (!groups[groupId]) layout = removeLeaf(layout, groupId) ?? layout;
+    }
+
+    const placed = new Set(leafGroupIds(layout));
+    const survivors = Object.keys(groups).filter((id) => placed.has(id));
+
+    // Nothing placed at all: rebuild a single pane so the session still opens.
+    if (survivors.length === 0) {
+      const rescued = Object.keys(session.tabs);
+      const groupId = uid('g');
+      return {
+        ...session,
+        layout: { type: 'leaf', groupId },
+        groups: { [groupId]: { id: groupId, tabIds: rescued, activeTabId: rescued[0] ?? null } },
+      };
+    }
+
+    // Groups holding tabs but not shown anywhere: fold their tabs into a pane
+    // that is, rather than dropping them.
+    const home = groups[survivors[0]];
+    for (const groupId of Object.keys(groups)) {
+      if (placed.has(groupId)) continue;
+      home.tabIds = [...home.tabIds, ...groups[groupId].tabIds];
+      delete groups[groupId];
+    }
+
+    // Drop references to tabs that are gone, then re-home any tab left out.
+    const seen = new Set<string>();
+    for (const groupId of Object.keys(groups)) {
+      groups[groupId] = {
+        ...groups[groupId],
+        tabIds: groups[groupId].tabIds.filter((id) => {
+          if (!session.tabs[id] || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        }),
+      };
+    }
+    const orphans = Object.keys(session.tabs).filter((id) => !seen.has(id));
+    if (orphans.length > 0) {
+      groups[survivors[0]] = {
+        ...groups[survivors[0]],
+        tabIds: [...groups[survivors[0]].tabIds, ...orphans],
+      };
+    }
+
+    for (const groupId of Object.keys(groups)) {
+      const group = groups[groupId];
+      if (!group.activeTabId || !group.tabIds.includes(group.activeTabId)) {
+        groups[groupId] = { ...group, activeTabId: group.tabIds[0] ?? null };
+      }
+    }
+
+    return { ...session, layout, groups };
+  }
+
   hydrate(sessions: Session[], scrollback: Record<string, string>): void {
     if (sessions.length === 0) return;
+
+    // Before anything else, or the first split after a restart collides.
+    reserveIds(
+      sessions.flatMap((session) => [
+        session.id,
+        ...Object.keys(session.groups),
+        ...Object.keys(session.tabs),
+      ]),
+    );
 
     for (const session of sessions) {
       // Agent state described a process that no longer exists; claiming a
@@ -62,7 +159,7 @@ export abstract class SessionStore implements SessionDriver {
       const tabs = Object.fromEntries(
         Object.entries(session.tabs).map(([id, tab]) => [id, { ...tab, agentState: undefined }]),
       );
-      this.sessions.set(session.id, { ...session, tabs });
+      this.sessions.set(session.id, this.sanitize({ ...session, tabs }));
     }
     this.notify();
 
