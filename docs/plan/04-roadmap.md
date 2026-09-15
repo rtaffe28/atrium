@@ -23,19 +23,25 @@ a browser tab and stays a supported target. See `06-host-interface.md`.
 
 ### ✅ Stage 2 — see a real PTY, outside this project
 
-Done, in `../pty-lab` — deliberately a separate repo. `01-hello-pty.mjs` spawns
-a shell on a PTY and prints every chunk with control bytes made visible. Its
-README records what the output proves: the shell believes it is on a tty,
+Done, in `experiments/pty`. `hello-pty.mjs` spawns a shell on a PTY and prints
+every chunk with control bytes made visible. Its README records what the output
+proves: the shell believes it is on a tty,
 SIGWINCH really resizes it, output arrives in arbitrary chunks that split
 escape sequences mid-sequence, and your own keystrokes echo back through the
 same loop.
 
+These started as a separate repo, back when atrium was a browser-only Vite app
+and adding `node-pty` for a learning exercise would have polluted its
+dependencies. atrium depends on `node-pty` now, so that reason expired and they
+moved in.
+
 **Carry this one forward:** node-pty's prebuilt `spawn-helper` arrives without
 its execute bit, because npm's tarball extraction drops it, and every spawn
 then fails with a bare `posix_spawnp failed` that looks like a code bug. The
-tell is that `/bin/echo` fails identically. `pty-lab` fixes it on postinstall.
-Expect the same class of problem at stage 6 — native helpers have to keep
-their permissions through asar packing and code signing.
+tell is that `/bin/echo` fails identically. `scripts/fix-spawn-helper.mjs`
+fixes it on postinstall. Expect the same class of problem when packaging —
+native helpers have to keep their permissions through asar packing and code
+signing.
 
 ### Stage 3 — a real terminal in a browser tab
 

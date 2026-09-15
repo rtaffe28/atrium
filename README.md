@@ -12,7 +12,8 @@ npm install
 
 npm run dev       # design loop in a browser tab, MockHost
 npm run electron  # the real app: real PTYs, needs `npm run dev` running
-npm test          # 29 tests
+npm test          # 51 tests
+npm run pty:clean # see a raw pseudo-terminal work, nothing else in the way
 ```
 
 `npm run electron` expects the dev server on :5173. For a standalone build,
@@ -48,6 +49,9 @@ src/
     HostSurface.tsx   a box the host fills (iframe now, <webview> later)
   settings/           preferences; localStorage, not a host concern
   notifications.ts    state diffing, synthesised chimes
+experiments/
+  pty/          raw node-pty programs; not part of the app, but the same
+                library it runs on
 electron/
   main.ts       window, IPC, workspace file
   preload.ts    the contextBridge surface
