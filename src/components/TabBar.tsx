@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState, type RefObject } from 'react';
 import { useDrag } from '../dnd/context';
+import { resolveTabBarDrop } from '../dnd/zones';
 import type { AgentState, Session, TabGroup, TabKind } from '../session/types';
 
 const STATE_TITLE: Record<AgentState, string> = {
@@ -10,6 +11,8 @@ const STATE_TITLE: Record<AgentState, string> = {
 };
 
 interface Props {
+  /** Owned by PaneView, which needs the bar's height to place its split bands. */
+  barRef: RefObject<HTMLDivElement | null>;
   session: Session;
   group: TabGroup;
   onActivate: (tabId: string) => void;
@@ -17,9 +20,8 @@ interface Props {
   onAdd: (kind: TabKind) => void;
 }
 
-export function TabBar({ session, group, onActivate, onClose, onAdd }: Props) {
+export function TabBar({ barRef, session, group, onActivate, onClose, onAdd }: Props) {
   const { begin, register, action, payload } = useDrag();
-  const barRef = useRef<HTMLDivElement>(null);
   const zoneId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -32,19 +34,13 @@ export function TabBar({ session, group, onActivate, onClose, onAdd }: Props) {
         resolve: (x) => {
           const bar = barRef.current;
           if (!bar) return null;
-          const tabs = [...bar.querySelectorAll<HTMLElement>('[data-tab-id]')];
-          let index = tabs.length;
-          for (let i = 0; i < tabs.length; i++) {
-            const rect = tabs[i].getBoundingClientRect();
-            if (x < rect.left + rect.width / 2) {
-              index = i;
-              break;
-            }
-          }
-          return { kind: 'tabbar', groupId: group.id, index };
+          const rects = [...bar.querySelectorAll<HTMLElement>('[data-tab-id]')].map((el) =>
+            el.getBoundingClientRect(),
+          );
+          return resolveTabBarDrop(x, rects, group.id);
         },
       }),
-    [register, zoneId, group.id],
+    [register, zoneId, group.id, barRef],
   );
 
   const dropIndex =

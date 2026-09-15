@@ -1,11 +1,10 @@
 import { useEffect, useId, useRef } from 'react';
 import { useDrag } from '../dnd/context';
+import { APPEND, resolvePaneZone } from '../dnd/zones';
 import type { Session, SessionDriver, TabKind } from '../session/types';
 import { BrowserView } from './BrowserView';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
-
-const EDGE_BAND = 0.28;
 
 interface Props {
   session: Session;
@@ -23,30 +22,26 @@ interface Props {
 export function PaneView({ session, groupId, driver }: Props) {
   const group = session.groups[groupId];
   const { register, action } = useDrag();
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const paneRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const zoneId = useId();
 
+  // Priority 3 puts this above the tab bar's reorder zone, so an edge drag
+  // along the bar splits rather than shuffling tabs.
   useEffect(
     () =>
       register({
         id: `pane:${zoneId}`,
-        priority: 1,
-        getRect: () => bodyRef.current?.getBoundingClientRect() ?? null,
-        resolve: (x, y, rect) => {
-          const fx = (x - rect.left) / rect.width;
-          const fy = (y - rect.top) / rect.height;
-          const distances = [
-            { edge: 'left' as const, d: fx },
-            { edge: 'right' as const, d: 1 - fx },
-            { edge: 'top' as const, d: fy },
-            { edge: 'bottom' as const, d: 1 - fy },
-          ].sort((a, b) => a.d - b.d);
-
-          if (distances[0].d < EDGE_BAND) {
-            return { kind: 'split', groupId, edge: distances[0].edge };
-          }
-          return { kind: 'tabbar', groupId, index: Number.MAX_SAFE_INTEGER };
-        },
+        priority: 3,
+        getRect: () => paneRef.current?.getBoundingClientRect() ?? null,
+        resolve: (x, y, rect) =>
+          resolvePaneZone(
+            x,
+            y,
+            rect,
+            barRef.current?.getBoundingClientRect().height ?? 0,
+            groupId,
+          ),
       }),
     [register, zoneId, groupId],
   );
@@ -57,13 +52,12 @@ export function PaneView({ session, groupId, driver }: Props) {
   const splitPreview =
     action?.kind === 'split' && action.groupId === groupId ? action.edge : null;
   const movePreview =
-    action?.kind === 'tabbar' &&
-    action.groupId === groupId &&
-    action.index === Number.MAX_SAFE_INTEGER;
+    action?.kind === 'tabbar' && action.groupId === groupId && action.index === APPEND;
 
   return (
-    <section className="pane">
+    <section className="pane" ref={paneRef}>
       <TabBar
+        barRef={barRef}
         session={session}
         group={group}
         onActivate={(tabId) => driver.activateTab(session.id, groupId, tabId)}
@@ -71,7 +65,7 @@ export function PaneView({ session, groupId, driver }: Props) {
         onAdd={(kind: TabKind) => driver.addTab(session.id, groupId, kind)}
       />
 
-      <div className="pane-body" ref={bodyRef}>
+      <div className="pane-body">
         {activeTab?.kind === 'terminal' && (
           <TerminalView tabId={activeTab.id} driver={driver} />
         )}
