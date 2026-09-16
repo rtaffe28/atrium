@@ -24,6 +24,11 @@ foreground process. That is the same signal a terminal uses to title its tabs,
 and it is the truth rather than a guess: it knows `vim` is open, not merely
 that `vim` was once typed.
 
+Since shell integration landed this is answered directly — the shell reports
+each command line and exit code over OSC 633 / OSC 133, so nothing has to be
+inferred. What follows is the fallback, used where a shell does not speak the
+protocol.
+
 The foreground process answers *whether* something is running. It is a poor
 answer to *what*, because a process can rename itself — Claude Code reports as
 its own version number, so trusting the name recorded `2.1.273` as the command

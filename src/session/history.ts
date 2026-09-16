@@ -33,6 +33,9 @@ const STRIP: RegExp[] = [
   /\x1b\[[0-9;]*n/g,
   // OSC colour queries, which also solicit a reply. Both terminators.
   /\x1b\][0-9;]*;\?(?:\x07|\x1b\\)/g,
+  // Shell integration events. Replaying these would re-announce commands that
+  // finished in a previous run as though they were starting now.
+  /\x1b\](?:133|633);[^\x07\x1b]*(?:\x07|\x1b\\)/g,
 ];
 /* eslint-enable no-control-regex */
 

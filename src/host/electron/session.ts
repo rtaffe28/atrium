@@ -1,6 +1,11 @@
 import { SessionStore } from '../../session/store';
 import type { AgentState, DataHandler, Unsubscribe } from '../../session/types';
 import { newBellScan, scanForBell, type BellScan } from '../../session/bell';
+import {
+  newShellEventScan,
+  scanShellEvents,
+  type ShellEventScan,
+} from '../../session/shellEvents';
 import { plausibleCommand } from '../../session/command';
 import { sanitizeHistory } from '../../session/history';
 import type { Session } from '../../session/types';
@@ -33,6 +38,7 @@ interface Stream {
   settle: number;
   /** Carried across chunks: a sequence can be split between two reads. */
   bell: BellScan;
+  shell: ShellEventScan;
   /**
    * The agent rang and has not been answered.
    *
@@ -155,7 +161,9 @@ export class ElectronSessionDriver extends SessionStore {
         // second. Clearing it when a process exits threw away the one thing
         // restore needs: exit an agent, quit, and the tab came back as a bare
         // shell even though it still knew which conversation it owned.
-        const command = idle ? tab.command : line || plausibleCommand(running);
+        // Only a guess, and only used where the shell is not reporting —
+        // another shell, or one whose rc files refused our integration.
+        const command = idle ? tab.command : tab.command || line || plausibleCommand(running);
 
         // The title does track the live state, so a finished tab stops
         // claiming something is running in it.
@@ -231,6 +239,7 @@ export class ElectronSessionDriver extends SessionStore {
         listeners: new Set(),
         settle: 0,
         bell: newBellScan(),
+        shell: newShellEventScan(),
         awaitingHuman: false,
       };
       this.streams.set(tabId, stream);
@@ -256,6 +265,8 @@ export class ElectronSessionDriver extends SessionStore {
     stream.buffer += data;
     for (const listener of stream.listeners) listener(data);
 
+    this.applyShellEvents(tabId, data, stream);
+
     if (!this.agents.has(tabId)) return;
 
     if (scanForBell(data, stream.bell)) {
@@ -272,6 +283,50 @@ export class ElectronSessionDriver extends SessionStore {
     this.setAgentState(tabId, 'working');
     window.clearTimeout(stream.settle);
     stream.settle = window.setTimeout(() => this.setAgentState(tabId, 'done'), SETTLE_MS);
+  }
+
+  /**
+   * What the shell reports, which beats anything we could infer.
+   *
+   * The foreground process name lies when a process renames itself, and a
+   * command reassembled from keystrokes is invalidated by a single control
+   * character. Both produced wrong answers in practice. A shell that speaks
+   * the integration protocol simply says what it ran and how it ended.
+   */
+  private applyShellEvents(tabId: string, data: string, stream: Stream) {
+    const session = this.sessionOfTab(tabId);
+    if (!session) return;
+
+    for (const event of scanShellEvents(data, stream.shell)) {
+      if (event.type === 'started' && event.command) {
+        const command = event.command.trim();
+        if (!command) continue;
+        this.update(session.id, (s) => ({
+          ...s,
+          tabs: {
+            ...s.tabs,
+            [tabId]: { ...s.tabs[tabId], command, title: command.split(/\s+/)[0] },
+          },
+        }));
+        continue;
+      }
+
+      if (event.type === 'finished' || event.type === 'prompt') {
+        // The command is kept — it is what this tab was last doing, and the
+        // only thing a restore has to go on. Only the title returns to idle.
+        this.update(session.id, (s) =>
+          s.tabs[tabId]?.title === this.shellName
+            ? s
+            : { ...s, tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], title: this.shellName } } },
+        );
+        if (event.type === 'finished' && this.agents.has(tabId)) {
+          window.clearTimeout(stream.settle);
+          if (!stream.awaitingHuman) {
+            this.setAgentState(tabId, event.exitCode === 0 ? 'done' : 'error');
+          }
+        }
+      }
+    }
   }
 
   private setAgentState(tabId: string, state: AgentState | undefined) {

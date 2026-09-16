@@ -13,6 +13,9 @@ const shared = {
   platform: 'node',
   target: 'node20',
   external: ['electron', 'node-pty'],
+  // Shell scripts ship as text, so they stay real files that a shell can
+  // syntax-check rather than string literals nothing validates.
+  loader: { '.sh': 'text', '.zsh': 'text' },
   sourcemap: true,
   logLevel: 'info',
 };
