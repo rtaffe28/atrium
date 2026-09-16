@@ -92,25 +92,42 @@ function Workspace() {
     [driver, active, targetGroupId],
   );
 
-  const createSession = useCallback(() => {
-    // Inherit the directory you are already working in. Agents ask permission
-    // per directory, and the home folder is the one nobody should grant
-    // wholesale — so a new session should land in the project you are in, not
-    // back at ~.
-    const inherited = sessions.find((s) => s.id === activeId)?.cwd;
-    const created = driver.createSession({
-      title: settings.defaultCommand.trim() || 'Shell',
-      cwd: inherited ?? settings.defaultCwd.trim() ?? '~',
-      branch: 'main',
-      command: settings.defaultCommand,
-    });
-    setActiveId(created.id);
-    setActiveGroupId(Object.keys(created.groups)[0] ?? null);
-    // Land in the new terminal ready to type, rather than on the button that
-    // opened it.
-    const firstTab = Object.keys(created.tabs)[0];
-    if (firstTab) setFocusRequest(requestFocus(firstTab));
-  }, [driver, settings.defaultCommand, settings.defaultCwd, sessions, activeId]);
+  /**
+   * Open a session running `command` — or a plain shell, when it is blank.
+   *
+   * The directory is always inherited from the session you are in. Agents ask
+   * permission per directory, and the home folder is the one nobody should
+   * grant wholesale, so a new session lands in the project you are already
+   * working in rather than back at ~. With nothing to inherit from there is no
+   * better answer than ~, and that is the first session only.
+   */
+  const openSession = useCallback(
+    (command: string) => {
+      const inherited = sessions.find((s) => s.id === activeId)?.cwd;
+      const created = driver.createSession({
+        title: command.trim() || 'Shell',
+        cwd: inherited || '~',
+        branch: 'main',
+        command,
+      });
+      setActiveId(created.id);
+      setActiveGroupId(Object.keys(created.groups)[0] ?? null);
+      // Land in the new terminal ready to type, rather than on the button that
+      // opened it.
+      const firstTab = Object.keys(created.tabs)[0];
+      if (firstTab) setFocusRequest(requestFocus(firstTab));
+    },
+    [driver, sessions, activeId],
+  );
+
+  // Both take no arguments on purpose: they are handed straight to onClick and
+  // onDoubleClick, and a handler that accepted one would be passed a
+  // MouseEvent as its command.
+  const createSession = useCallback(
+    () => openSession(settings.defaultCommand),
+    [openSession, settings.defaultCommand],
+  );
+  const createShellSession = useCallback(() => openSession(''), [openSession]);
 
   /** Entering an existing session should also put the cursor in its terminal. */
   const selectSession = useCallback(
@@ -184,6 +201,7 @@ function Workspace() {
             activeId={active?.id ?? null}
             onSelect={selectSession}
             onCreate={createSession}
+            onCreateShell={createShellSession}
             onKill={(id) => driver.killSession(id)}
           />
           {/* Double-clicking the empty workspace opens a session — the same

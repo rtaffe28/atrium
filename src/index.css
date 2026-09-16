@@ -166,6 +166,36 @@ kbd {
 .icon-button.subtle { border-color: transparent; background: transparent; }
 .icon-button.subtle:hover { background: var(--panel-high); }
 
+/* The + and the menu a hold on it opens. Sized by its longest label rather
+   than a min-width: two entries do not need to look like a panel. */
+.new-session {
+  position: relative;
+}
+.new-session-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 20;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-raised);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 45%);
+}
+.new-session-menu button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11.5px;
+  text-align: left;
+  white-space: nowrap;
+}
+.new-session-menu button:hover { background: var(--panel-high); }
+
 .session-list {
   list-style: none;
   margin: 0;

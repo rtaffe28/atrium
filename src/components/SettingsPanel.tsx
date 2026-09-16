@@ -37,12 +37,6 @@ function Toggle({
   );
 }
 
-/** `~`, `$HOME`, or an empty value that falls back to it. */
-function isHomeDirectory(path: string): boolean {
-  const trimmed = path.trim().replace(/\/+$/, '');
-  return trimmed === '' || trimmed === '~' || trimmed === '$HOME';
-}
-
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { settings, update, reset } = useSettings();
   const host = useHost();
@@ -78,44 +72,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
         <section className="settings-section">
           <h3>New sessions</h3>
-          <label className="setting-row">
-            <span className="setting-text">
-              <span className="setting-label">Working directory</span>
-              <span className="setting-hint">
-                Where the first session opens; after that, new ones inherit the
-                directory you are in. Point it at a project rather than your
-                home folder — an agent asks permission per directory, and your
-                home folder is the one to never grant wholesale.
-              </span>
-            </span>
-            <span className="setting-pair">
-              <input
-                className="setting-input"
-                value={settings.defaultCwd}
-                spellCheck={false}
-                placeholder="~/git/atrium"
-                onChange={(event) => update({ defaultCwd: event.target.value })}
-              />
-              <button
-                type="button"
-                className="ghost-button tiny"
-                onClick={() => {
-                  void host.files.chooseDirectory().then((dir) => {
-                    if (dir) update({ defaultCwd: dir });
-                  });
-                }}
-              >
-                Choose…
-              </button>
-            </span>
-          </label>
-          {isHomeDirectory(settings.defaultCwd) && (
-            <p className="setting-warning">
-              Agents ask permission per directory, and will not remember being
-              trusted with your whole home folder — so they ask again on every
-              launch. Point this at a project and the question is asked once.
-            </p>
-          )}
           <label className="setting-row">
             <span className="setting-text">
               <span className="setting-label">Default command</span>

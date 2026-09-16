@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useDrag } from '../dnd/context';
 import { deriveSessionState, type Session, type SessionState } from '../session/types';
 
@@ -17,15 +17,32 @@ function relativeTime(ts: number): string {
   return `${Math.round(mins / 60)}h ago`;
 }
 
+/**
+ * How long + has to be held before it opens the menu instead of a session.
+ *
+ * Long enough that an ordinary click never reaches it, short enough that you
+ * do not wonder whether the press registered.
+ */
+const HOLD_MS = 450;
+
 interface Props {
   sessions: Session[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  /** A session with no agent in it — just the shell, in the same directory. */
+  onCreateShell: () => void;
   onKill: (id: string) => void;
 }
 
-export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Props) {
+export function Sidebar({
+  sessions,
+  activeId,
+  onSelect,
+  onCreate,
+  onCreateShell,
+  onKill,
+}: Props) {
   const { register, action } = useDrag();
   const railRef = useRef<HTMLElement>(null);
   const zoneId = useId();
@@ -44,6 +61,53 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
 
   const railActive = action?.kind === 'rail';
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const holdTimer = useRef<number | null>(null);
+  // A hold has already done its work by the time the pointer comes up. The
+  // click that follows it must not open a session on top of the menu.
+  const held = useRef(false);
+
+  const cancelHold = () => {
+    if (holdTimer.current === null) return;
+    window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+
+  const beginHold = () => {
+    held.current = false;
+    cancelHold();
+    holdTimer.current = window.setTimeout(() => {
+      held.current = true;
+      setMenuOpen(true);
+    }, HOLD_MS);
+  };
+
+  useEffect(() => cancelHold, []);
+
+  // Dismissed the way every other menu is: click away, or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
+
+  const choose = (create: () => void) => {
+    setMenuOpen(false);
+    held.current = false;
+    create();
+  };
+
   // Double-clicking blank rail space opens a session — the same gesture as the
   // empty workspace. Guarded so a double-click on a row is still just a
   // double-click on that row.
@@ -60,9 +124,40 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
     >
       <header className="sidebar-head">
         <div className="sidebar-title">Sessions</div>
-        <button className="icon-button" onClick={onCreate} title="New session (⌘N)">
-          +
-        </button>
+        <div className="new-session">
+          <button
+            className="icon-button"
+            onPointerDown={beginHold}
+            onPointerUp={cancelHold}
+            onPointerLeave={cancelHold}
+            onClick={() => {
+              if (held.current) {
+                held.current = false;
+                return;
+              }
+              onCreate();
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenuOpen(true);
+            }}
+            title="New session (⌘N) — hold for more"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            +
+          </button>
+          {menuOpen && (
+            <div className="new-session-menu" role="menu" ref={menuRef}>
+              <button role="menuitem" onClick={() => choose(onCreate)}>
+                Open with default command
+              </button>
+              <button role="menuitem" onClick={() => choose(onCreateShell)}>
+                Fresh session
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       <ul className="session-list">
