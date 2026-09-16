@@ -1,5 +1,5 @@
 import { useHost } from '../host/context';
-import type { Session } from '../session/types';
+import type { Session, TabKind } from '../session/types';
 
 /**
  * The custom title bar.
@@ -21,7 +21,7 @@ import type { Session } from '../session/types';
 interface Props {
   session: Session | null;
   onOpenSettings: () => void;
-  onNewTab: (kind: 'terminal' | 'browser') => void;
+  onNewTab: (kind: TabKind) => void;
   canAddTab: boolean;
 }
 
@@ -106,6 +106,23 @@ export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab }: Props
               <ellipse cx="8" cy="8" rx="2.7" ry="6" />
               <path d="M2.3 6h11.4M2.3 10h11.4" strokeLinecap="round" />
             </g>
+          </svg>
+        </button>
+        <button
+          className="icon-button subtle"
+          onClick={() => onNewTab('files')}
+          disabled={!canAddTab}
+          title="New file explorer tab"
+          aria-label="New file explorer tab"
+        >
+          {/* A folder — the mark every file tree uses. */}
+          <svg viewBox="0 0 16 16" aria-hidden width="14" height="14" fill="none">
+            <path
+              d="M1.9 12.6V4.2a1 1 0 0 1 1-1h3.2l1.5 1.8h5.5a1 1 0 0 1 1 1v6.6a1 1 0 0 1-1 1H2.9a1 1 0 0 1-1-1Z"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
         <span className="titlebar-divider" />

@@ -40,6 +40,8 @@ export interface Capabilities {
   pty: boolean;
   /** How embedded web content renders, or 'none' if it cannot. */
   browserSurface: 'webview' | 'iframe' | 'none';
+  /** Reading directories and files from disk. */
+  files: boolean;
   /** OS-level notifications as opposed to in-app ones. */
   nativeNotifications: boolean;
   /** Frameless window with app-drawn chrome. */
@@ -73,6 +75,25 @@ export interface SurfaceDriver {
   back(id: string): Promise<void>;
   forward(id: string): Promise<void>;
   subscribe(id: string, handler: (event: SurfaceEvent) => void): Unsubscribe;
+}
+
+// ── files ──────────────────────────────────────────────────────────────────
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  directory: boolean;
+}
+
+export interface FileContents {
+  text: string;
+  /** Large files are cut off rather than freezing the renderer. */
+  truncated: boolean;
+}
+
+export interface FileDriver {
+  list(path: string): Promise<FileEntry[]>;
+  read(path: string): Promise<FileContents>;
 }
 
 // ── notifications ──────────────────────────────────────────────────────────
@@ -142,6 +163,7 @@ export interface Host {
   readonly capabilities: Capabilities;
   readonly sessions: SessionDriver;
   readonly surfaces: SurfaceDriver;
+  readonly files: FileDriver;
   readonly notify: NotifyDriver;
   readonly window: WindowDriver;
   readonly workspace: WorkspaceDriver;

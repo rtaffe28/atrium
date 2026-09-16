@@ -5,6 +5,7 @@ import { HostProvider } from './host/HostProvider';
 import { useHost } from './host/context';
 import { MockHost } from './host/mock';
 import type { Host } from './host/types';
+import { COMMANDS, matches } from './keyboard/commands';
 import { useAgentNotifications } from './notifications';
 import { SettingsProvider } from './settings/SettingsProvider';
 import { useSettings } from './settings/context';
@@ -13,7 +14,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { requestFocus, type FocusRequest } from './focusRequest';
-import type { DropAction, Session } from './session/types';
+import type { DropAction, Session, TabKind } from './session/types';
 
 export default function App({ host }: { host?: Host }) {
   // Swapping this one line for ElectronHost is the entire graduation from
@@ -83,7 +84,7 @@ function Workspace() {
       : (active && Object.keys(active.groups)[0]) || null;
 
   const addTab = useCallback(
-    (kind: 'terminal' | 'browser') => {
+    (kind: TabKind) => {
       if (!active || !targetGroupId) return;
       const created = driver.addTab(active.id, targetGroupId, kind);
       setFocusRequest(requestFocus(created.id));
@@ -148,21 +149,25 @@ function Workspace() {
   );
 
   useEffect(() => {
+    const run: Record<string, () => void> = {
+      'session.new': createSession,
+      'tab.newTerminal': () => addTab('terminal'),
+      'tab.close': () => {
+        const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
+        if (active && tabId) driver.closeTab(active.id, tabId);
+      },
+      'settings.open': () => setSettingsOpen(true),
+    };
+
     const onKey = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey;
-      if (!mod) return;
-      if (event.key.toLowerCase() === 'n') {
-        event.preventDefault();
-        createSession();
-      }
-      if (event.key === ',') {
-        event.preventDefault();
-        setSettingsOpen(true);
-      }
+      const command = COMMANDS.find((c) => matches(event, c.keys));
+      if (!command) return;
+      event.preventDefault();
+      run[command.id]?.();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [createSession]);
+  }, [createSession, addTab, driver, active, targetGroupId]);
 
   return (
     <DragProvider onDrop={handleDrop}>

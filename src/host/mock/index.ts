@@ -7,6 +7,7 @@ import type {
   WindowDriver,
   WindowState,
 } from '../types';
+import { MockFiles } from './files';
 import { WebNotify } from './notify';
 import { IframeSurfaces } from './surfaces';
 import { LocalStorageWorkspace } from './workspace';
@@ -51,6 +52,7 @@ export class MockHost implements Host {
   readonly name = 'mock';
   readonly sessions = new MockDriver();
   readonly surfaces = new IframeSurfaces();
+  readonly files = new MockFiles();
   readonly notify = new WebNotify();
   readonly window = new BrowserWindowDriver();
   readonly workspace = new LocalStorageWorkspace();
@@ -58,6 +60,7 @@ export class MockHost implements Host {
   readonly capabilities: Capabilities = {
     pty: false,
     browserSurface: 'iframe',
+    files: true,
     nativeNotifications: typeof Notification !== 'undefined',
     customChrome: false,
     persistence: true,

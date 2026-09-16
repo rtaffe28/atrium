@@ -16,7 +16,7 @@ export type AgentState = 'working' | 'waiting' | 'done' | 'error';
 /** A session's state is derived from its agent tabs — see deriveSessionState. */
 export type SessionState = AgentState | 'idle';
 
-export type TabKind = 'terminal' | 'browser';
+export type TabKind = 'terminal' | 'browser' | 'files';
 
 export interface Tab {
   id: string;

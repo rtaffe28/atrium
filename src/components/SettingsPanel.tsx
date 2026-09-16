@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useHost } from '../host/context';
+import { COMMANDS, display } from '../keyboard/commands';
 import { useSettings } from '../settings/context';
 import { FONT_SIZES } from '../settings/types';
 
@@ -58,6 +59,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const permission = host.notify.permission();
+  const platform = host.window.platform();
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -181,6 +183,26 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               ))}
             </select>
           </label>
+        </section>
+
+        <section className="settings-section">
+          <h3>Keyboard</h3>
+          {(['Sessions', 'Tabs', 'Application'] as const).map((group) => (
+            <div key={group} className="shortcut-group">
+              <span className="shortcut-group-name">{group}</span>
+              {COMMANDS.filter((c) => c.group === group).map((command) => (
+                <div key={command.id} className="shortcut-row">
+                  <span>{command.label}</span>
+                  <kbd>{display(command.keys, platform)}</kbd>
+                </div>
+              ))}
+            </div>
+          ))}
+          <p className="setting-hint">
+            Fixed for now. Rebinding is designed in docs/plan/10-keyboard.md;
+            this list is generated from the same table the app binds, so it
+            cannot fall out of step with what the keys actually do.
+          </p>
         </section>
 
         <footer className="modal-foot">

@@ -382,6 +382,11 @@ kbd {
   background: linear-gradient(135deg, #3d4757 0%, #2a323d 100%);
   box-shadow: inset 0 0 0 1px #4b5565;
 }
+.glyph-files {
+  background: linear-gradient(135deg, #6b5f3f 0%, #4a4130 100%);
+  box-shadow: inset 0 0 0 1px #7d7050;
+  border-radius: 2px 3px 3px 3px;
+}
 .glyph-browser {
   background: linear-gradient(135deg, #3a4f6b 0%, #26374d 100%);
   box-shadow: inset 0 0 0 1px #4a6c94;
@@ -678,3 +683,119 @@ webview.surface-frame { display: inline-flex; }
   transition: transform 140ms, background 140ms;
 }
 .switch.is-on .switch-knob { transform: translateX(16px); background: #0d0f12; }
+
+
+/* ── file explorer ───────────────────────────────────────────────────── */
+
+.files { flex: 1; display: flex; min-height: 0; min-width: 0; }
+
+.files-tree {
+  width: 240px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-soft);
+  background: var(--panel);
+  overflow: auto;
+}
+.files-root {
+  margin: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree, .tree-children { list-style: none; margin: 0; padding: 0; }
+.tree { padding: 4px 0 10px; }
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 10px 3px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background 100ms, color 100ms;
+}
+.tree-row:hover { background: var(--panel-raised); color: var(--text); }
+.tree-row.is-open { background: var(--panel-high); color: var(--text); }
+
+.tree-mark {
+  width: 10px;
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--text-faint);
+}
+.tree-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.files-view { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.files-path {
+  margin: 0;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.files-code {
+  flex: 1;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  tab-size: 2;
+}
+.files-note {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+
+/* ── shortcut list ───────────────────────────────────────────────────── */
+
+.shortcut-group { margin-bottom: 12px; }
+.shortcut-group:last-of-type { margin-bottom: 4px; }
+.shortcut-group-name {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+.shortcut-row:last-child { border-bottom: 0; }
+.shortcut-row kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: var(--panel-raised);
+}

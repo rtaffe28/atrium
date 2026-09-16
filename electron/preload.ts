@@ -67,6 +67,11 @@ const bridge = {
       ipcRenderer.invoke('agent:newest-codex-session', since),
   },
 
+  files: {
+    list: (path: string): Promise<unknown> => ipcRenderer.invoke('files:list', path),
+    read: (path: string): Promise<unknown> => ipcRenderer.invoke('files:read', path),
+  },
+
   notify: {
     post: (notice: { title: string; body: string; tag: string }): Promise<void> =>
       ipcRenderer.invoke('notify:post', notice),

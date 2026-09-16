@@ -1,4 +1,5 @@
 import type {
+  FileDriver,
   PersistedWorkspace,
   WorkspaceDriver,
   Capabilities,
@@ -88,10 +89,28 @@ class FileWorkspace implements WorkspaceDriver {
   }
 }
 
+/** Reads through the main process, which is the only side with a filesystem. */
+class ElectronFiles implements FileDriver {
+  private bridge: AtriumBridge;
+
+  constructor(bridge: AtriumBridge) {
+    this.bridge = bridge;
+  }
+
+  list(path: string) {
+    return this.bridge.files.list(path);
+  }
+
+  read(path: string) {
+    return this.bridge.files.read(path);
+  }
+}
+
 export class ElectronHost implements Host {
   readonly name = 'electron';
   readonly sessions: ElectronSessionDriver;
   readonly surfaces = new WebviewSurfaces();
+  readonly files: ElectronFiles;
   readonly notify: NativeNotify;
   readonly window: ElectronWindowDriver;
   readonly workspace: FileWorkspace;
@@ -100,11 +119,13 @@ export class ElectronHost implements Host {
   constructor(bridge: AtriumBridge, info: HostInfo, restore?: RestoreInput) {
     this.sessions = new ElectronSessionDriver(bridge, info.home, info.shell, restore);
     this.workspace = new FileWorkspace(bridge);
+    this.files = new ElectronFiles(bridge);
     this.notify = new NativeNotify(bridge);
     this.window = new ElectronWindowDriver(bridge, info);
     this.capabilities = {
       pty: true,
       browserSurface: 'webview',
+      files: true,
       // Both are real capabilities of this host that are simply not built yet.
       // Saying false is the honest answer and keeps the UI from offering them.
       nativeNotifications: true,

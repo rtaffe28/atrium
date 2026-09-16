@@ -1,0 +1,73 @@
+# Keyboard
+
+## Where it is now
+
+Every binding lives in one table, `src/keyboard/commands.ts`. The handler in
+`App` and the list in Settings both read it, so the shortcuts a user is shown
+are by construction the shortcuts that run — a binding defined in a component
+and described again in a panel is two things that drift.
+
+| Command | Binding | Group |
+|---|---|---|
+| New session | `Mod+N` | Sessions |
+| New terminal tab | `Mod+T` | Tabs |
+| Close tab | `Mod+W` | Tabs |
+| Settings | `Mod+,` | Application |
+
+`Mod` is the platform's command key, so a binding is written once and rendered
+as `⌘N` on macOS and `Ctrl+N` elsewhere. A test asserts no two commands claim
+the same keys.
+
+## The rule that constrains everything here
+
+**The terminal gets every key we do not take.** This app's whole purpose is
+running agents in a terminal, and a shortcut that swallows a key an agent needs
+is worse than no shortcut. Escape was bound to "interrupt" early on and had to
+be given back: vim, readline and agents' own cancel handling all need it.
+
+That rules out bare keys and most `Ctrl+` combinations outright — `Ctrl+C`,
+`Ctrl+D`, `Ctrl+R`, `Ctrl+W` all mean something to a shell. On macOS this is
+comfortable, because `⌘` is free. On Windows and Linux it is the central
+problem: `Ctrl+N` and `Ctrl+W` collide with things people type. Both platforms'
+terminals solve it the same way and we should follow — `Ctrl+Shift+` for app
+commands, leaving plain `Ctrl+` to the terminal.
+
+## Rebinding
+
+Three pieces, in order of what they unlock:
+
+**1. Store overrides.** A map of command id to binding in settings, merged over
+the defaults at read time. Settings already persists per-viewer, so this is a
+field and a merge, not new machinery.
+
+**2. Capture a keypress.** A row in Settings becomes a button that listens for
+the next chord and writes it. The fiddly parts are showing the pending state,
+allowing Escape to cancel without binding Escape, and refusing a chord with no
+modifier — a bare letter would be swallowed before the terminal ever sees it.
+
+**3. Report conflicts rather than silently taking the last one.** Two kinds
+matter: two commands claiming one chord, which the existing uniqueness test
+catches for defaults but not for overrides; and a chord the terminal needs,
+which should warn rather than refuse — someone may genuinely want it.
+
+## Worth having before rebinding
+
+A **command palette** (`Mod+K`, already reserved in the title bar and doing
+nothing). Most shortcuts exist because a thing is hard to reach; a palette
+makes everything reachable and shrinks how many bindings are worth defining. It
+also gives rebinding its natural home: each palette entry shows its binding,
+and rebinding from there is a smaller surface than a settings table.
+
+Commands worth adding once a palette exists, none of which deserve a key of
+their own: switch to session by name, split the pane, move a tab to a new
+session, open a file explorer here, change the working directory.
+
+## Not planned
+
+**Chords** (`Mod+K` then `S`, VS Code style). They earn their place at a few
+hundred commands; at a dozen they are a lookup table the user has to memorise
+for no gain.
+
+**Vim-style modal keys.** The terminal already contains vim if that is what
+someone wants, and a modal layer above a modal program is a way to lose track
+of which one is listening.

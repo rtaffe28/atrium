@@ -1,11 +1,11 @@
 import { createContext, useContext } from 'react';
-import type { DropAction } from '../session/types';
+import type { DropAction, TabKind } from '../session/types';
 
 export interface DragPayload {
   tabId: string;
   sessionId: string;
   title: string;
-  kind: 'terminal' | 'browser';
+  kind: TabKind;
 }
 
 /** A registered drop zone. `resolve` returns null if the point misses. */

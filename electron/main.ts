@@ -3,6 +3,7 @@ import { readFile, writeFile, rename, readdir, stat, mkdir, rm } from 'node:fs/p
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
+import { listDirectory, readTextFile } from './files';
 import { PtyManager } from './pty';
 import { useBaseDirectory } from './shims';
 
@@ -207,6 +208,9 @@ app.whenReady().then(async () => {
     await walk(root, 3);
     return best?.id ?? null;
   });
+
+  ipcMain.handle('files:list', (_e, path: string) => listDirectory(path));
+  ipcMain.handle('files:read', (_e, path: string) => readTextFile(path));
 
   ipcMain.handle('notify:post', (_e, notice: { title: string; body: string; tag: string }) => {
     if (!Notification.isSupported()) return;
