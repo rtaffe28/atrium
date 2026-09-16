@@ -36,6 +36,12 @@ function Toggle({
   );
 }
 
+/** `~`, `$HOME`, or an empty value that falls back to it. */
+function isHomeDirectory(path: string): boolean {
+  const trimmed = path.trim().replace(/\/+$/, '');
+  return trimmed === '' || trimmed === '~' || trimmed === '$HOME';
+}
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { settings, update, reset } = useSettings();
   const host = useHost();
@@ -88,6 +94,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               onChange={(event) => update({ defaultCwd: event.target.value })}
             />
           </label>
+          {isHomeDirectory(settings.defaultCwd) && (
+            <p className="setting-warning">
+              Agents ask permission per directory, and will not remember being
+              trusted with your whole home folder — so they ask again on every
+              launch. Point this at a project and the question is asked once.
+            </p>
+          )}
           <label className="setting-row">
             <span className="setting-text">
               <span className="setting-label">Default command</span>
