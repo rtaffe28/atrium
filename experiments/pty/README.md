@@ -60,7 +60,7 @@ which looks like a bug in your code and is not. `/bin/echo` fails identically,
 which is the tell — if *nothing* can spawn, it is not the thing you are
 spawning.
 
-`scripts/fix-spawn-helper.mjs` runs on atrium's `postinstall` so `npm ci`
+`scripts/native-permissions.mjs` runs on atrium's `postinstall` so `npm ci`
 cannot silently undo it. Expect the same class of problem when packaging:
 native helpers have to keep their permissions through asar packing and code
 signing.

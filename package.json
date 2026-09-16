@@ -11,16 +11,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:build": "node scripts/build-electron.mjs",
-    "electron": "npm run electron:build && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron": "npm run electron:build && node scripts/native-permissions.mjs && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:prod": "npm run build && npm run electron:build && electron .",
-    "postinstall": "node scripts/fix-spawn-helper.mjs",
+    "postinstall": "node scripts/native-permissions.mjs",
     "pty": "node experiments/pty/hello-pty.mjs",
     "pty:clean": "node experiments/pty/hello-pty.mjs --clean",
-    "dist": "npm run build && npm run electron:build && electron-builder --mac",
-    "dist:dir": "npm run build && npm run electron:build && electron-builder --mac --dir",
+    "dist": "npm run build && npm run electron:build && electron-builder",
+    "dist:dir": "npm run build && npm run electron:build && electron-builder --dir",
     "install:app": "node scripts/install.mjs",
     "icon": "python3 build/make-icon.py",
-    "dist:linux": "npm run build && npm run electron:build && electron-builder --linux"
+    "dist:linux": "npm run build && npm run electron:build && electron-builder --linux",
+    "dist:mac": "npm run build && npm run electron:build && electron-builder --mac"
   },
   "dependencies": {
     "node-pty": "^1.1.0"

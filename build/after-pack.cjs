@@ -14,22 +14,24 @@ const { chmodSync, existsSync, statSync } = require('node:fs');
 const { join } = require('node:path');
 
 exports.default = async function afterPack(context) {
-  if (context.electronPlatformName === 'win32') return;
+  // Only macOS has a spawn-helper to lose: node-pty ships prebuilds for darwin
+  // and win32 only, compiles from source on Linux, and calls forkpty directly
+  // there. Warning about a missing helper on Linux reports a problem that does
+  // not exist, in the one place a real one would be easy to miss.
+  if (context.electronPlatformName !== 'darwin') return;
 
-  if (context.electronPlatformName === 'darwin') adhocSign(context);
-
-  const resources =
-    context.electronPlatformName === 'darwin'
-      ? join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources')
-      : join(context.appOutDir, 'resources');
+  adhocSign(context);
 
   const helper = join(
-    resources,
+    context.appOutDir,
+    `${context.packager.appInfo.productFilename}.app`,
+    'Contents',
+    'Resources',
     'app.asar.unpacked',
     'node_modules',
     'node-pty',
     'prebuilds',
-    `${context.electronPlatformName}-${context.arch === 1 ? 'x64' : 'arm64'}`,
+    `darwin-${context.arch === 1 ? 'x64' : 'arm64'}`,
     'spawn-helper',
   );
 
