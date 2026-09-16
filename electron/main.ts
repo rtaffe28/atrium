@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
 import { PtyManager } from './pty';
+import { useBaseDirectory } from './shims';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
@@ -106,6 +107,10 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Shims and shell integration belong with the app's data, not scattered
+  // through the temp directory one copy per launch.
+  useBaseDirectory(app.getPath('userData'));
+
   const env = await resolveLoginEnv();
   loginShellName = (env.SHELL ?? '/bin/zsh').split('/').pop() ?? 'zsh';
   ptys = new PtyManager(env, () => {});

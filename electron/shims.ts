@@ -1,6 +1,30 @@
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+/**
+ * Where the shim and shell-integration files live.
+ *
+ * A stable directory under the app's own data, not a fresh temp directory per
+ * launch. Scattering them through /var/folders left dozens of orphans that
+ * nothing owned and nothing cleaned up — and made them easy to delete out from
+ * under a running app, which silently unbinds every open tab.
+ *
+ * Rewritten on each launch so an updated shim actually ships.
+ */
+let baseDir: string | null = null;
+
+export function useBaseDirectory(dir: string): void {
+  baseDir = dir;
+}
+
+function makeDirectory(name: string): string {
+  if (!baseDir) return mkdtempSync(join(tmpdir(), `atrium-${name}-`));
+  const dir = join(baseDir, name);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 /**
  * A shim directory placed at the front of every session's PATH.
@@ -104,7 +128,7 @@ export function shimDirectory(): string | null {
   if (cached) return cached;
   if (process.platform === 'win32') return null;
   try {
-    const dir = mkdtempSync(join(tmpdir(), 'atrium-shims-'));
+    const dir = makeDirectory('shims');
     for (const [name, body] of [['claude', CLAUDE_SHIM], ['codex', CODEX_SHIM]] as const) {
       const shim = join(dir, name);
       writeFileSync(shim, body, 'utf8');
@@ -112,8 +136,12 @@ export function shimDirectory(): string | null {
     }
     cached = dir;
     return dir;
-  } catch {
-    // Without shims agents still run; they just cannot be resumed exactly.
+  } catch (error) {
+    // Agents still run without shims; they just cannot be bound to a session,
+    // so a command typed by hand will not be resumable. Worth saying out loud
+    // rather than degrading in silence — that failure is invisible until a
+    // restart does not restore what you were doing.
+    console.error('[atrium] could not create agent shims:', error);
     return null;
   }
 }
@@ -176,7 +204,7 @@ let startupDir: string | null = null;
 function zshStartup(): string | null {
   if (startupDir) return startupDir;
   try {
-    const dir = mkdtempSync(join(tmpdir(), 'atrium-zdotdir-'));
+    const dir = makeDirectory('zdotdir');
     writeFileSync(join(dir, '.zshenv'), ZSHENV, 'utf8');
     startupDir = dir;
     return dir;
