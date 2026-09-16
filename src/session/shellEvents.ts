@@ -15,6 +15,7 @@
  *   OSC 133 ; C    a command is starting
  *   OSC 133 ; D ; n  the command finished with exit code n
  *   OSC 633 ; E ; cmd  the command line, verbatim
+ *   OSC 633 ; P ; Cwd=path  where the shell is now
  *
  * Adopting the same codes rather than inventing our own means the integration
  * also works if the shell is opened somewhere that already speaks it.
@@ -23,7 +24,8 @@
 export type ShellEvent =
   | { type: 'prompt' }
   | { type: 'started'; command?: string }
-  | { type: 'finished'; exitCode: number };
+  | { type: 'finished'; exitCode: number }
+  | { type: 'cwd'; cwd: string };
 
 export interface ShellEventScan {
   /** A partial sequence carried over from the previous chunk. */
@@ -56,6 +58,13 @@ export function scanShellEvents(chunk: string, state: ShellEventScan): ShellEven
 
     if (code === '633' && kind === 'E') {
       events.push({ type: 'started', command: decode(rest.join(';')) });
+    } else if (code === '633' && kind === 'P') {
+      // One property per sequence, as Key=Value. Rejoined rather than indexed
+      // because a path may contain the separator.
+      const property = rest.join(';');
+      if (property.startsWith('Cwd=')) {
+        events.push({ type: 'cwd', cwd: decode(property.slice(4)) });
+      }
     } else if (code === '133') {
       if (kind === 'A') events.push({ type: 'prompt' });
       else if (kind === 'C') events.push({ type: 'started' });

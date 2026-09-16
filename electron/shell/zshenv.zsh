@@ -44,6 +44,7 @@ if [[ -o interactive ]]; then
   _atrium_precmd() {
     builtin local code=$?
     _atrium_osc "133;D;$code"
+    _atrium_osc "633;P;Cwd=$(_atrium_escape "$PWD")"
     _atrium_osc "133;A"
     builtin return $code
   }

@@ -346,6 +346,18 @@ export class ElectronSessionDriver extends SessionStore {
         continue;
       }
 
+      if (event.type === 'cwd') {
+        // Arrives on every prompt, so the guard is what keeps a prompt from
+        // being a workspace write.
+        if (session.tabs[tabId]?.cwd !== event.cwd) {
+          this.update(session.id, (s) => ({
+            ...s,
+            tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], cwd: event.cwd } },
+          }));
+        }
+        continue;
+      }
+
       if (event.type === 'finished' || event.type === 'prompt') {
         // The command is kept — it is what this tab was last doing, and the
         // only thing a restore has to go on. Only the title returns to idle.

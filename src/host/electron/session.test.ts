@@ -95,6 +95,37 @@ describe('what a tab is running, as reported by the shell', () => {
     driver.dispose();
   });
 
+  /**
+   * The session's own cwd is where it was opened. A new session inheriting
+   * that puts you back where you started rather than where you are.
+   */
+  it('follows the shell into a new directory', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
+    expect(driver.list()[0].tabs[tabId].cwd).toBe('/Users/ryan/git/atrium');
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium/src'));
+    expect(driver.list()[0].tabs[tabId].cwd).toBe('/Users/ryan/git/atrium/src');
+    driver.dispose();
+  });
+
+  /** It arrives on every prompt; unchanged must not mean a workspace write. */
+  it('does not touch the session when the directory has not changed', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
+    const before = driver.list()[0];
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
+    expect(driver.list()[0]).toBe(before);
+    driver.dispose();
+  });
+
   it('is unbothered by a command line containing semicolons', async () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
