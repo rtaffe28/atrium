@@ -14,6 +14,12 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<Settings>;
+    // Sessions are resumed by id now. Leaving the old default in place would
+    // pass --continue explicitly, which the shim honours and which resumes
+    // "most recent in this directory" rather than this tab's conversation.
+    if (parsed.restoreOverrides?.trim() === 'claude = claude --continue') {
+      parsed.restoreOverrides = '';
+    }
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,

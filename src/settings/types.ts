@@ -41,9 +41,9 @@ export interface Settings {
    * How a captured command is rewritten when a session is restored, one
    * `command = replacement` per line.
    *
-   * Restoring is pointless if it hands you a blank agent, and only the agent
-   * knows how to resume itself — so this is a mapping rather than anything the
-   * app tries to be clever about.
+   * Usually empty. Claude Code is resumed by session id instead, which is
+   * exact where a rewrite to `--continue` is not — and an explicit flag here
+   * would override that. This stays for tools that need it.
    */
   restoreOverrides: string;
 }
@@ -55,7 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalFontSize: 13,
   defaultCommand: 'claude',
   defaultCwd: '~',
-  restoreOverrides: 'claude = claude --continue',
+  restoreOverrides: '',
 };
 
 export const FONT_SIZES = [11, 12, 13, 14, 16] as const;

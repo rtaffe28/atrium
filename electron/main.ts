@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron';
-import { readFile, writeFile, rename } from 'node:fs/promises';
+import { readFile, writeFile, rename, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
@@ -138,6 +138,27 @@ app.whenReady().then(async () => {
     const temporary = `${workspaceFile}.tmp`;
     await writeFile(temporary, JSON.stringify(state), 'utf8');
     await rename(temporary, workspaceFile);
+  });
+
+  /**
+   * Has this agent conversation been started before?
+   *
+   * Claude Code keeps one JSONL per conversation under ~/.claude/projects,
+   * named by session id, so the answer is simply whether that file exists.
+   * It decides whether a tab claims its id or resumes it.
+   */
+  ipcMain.handle('agent:has-session', async (_e, sessionId: string) => {
+    if (!/^[A-Za-z0-9-]{8,}$/.test(sessionId)) return false;
+    const root = path.join(env.HOME ?? '', '.claude', 'projects');
+    try {
+      for (const project of await readdir(root)) {
+        const files = await readdir(path.join(root, project)).catch(() => []);
+        if (files.includes(`${sessionId}.jsonl`)) return true;
+      }
+    } catch {
+      // No projects directory yet: nothing has ever been started.
+    }
+    return false;
   });
 
   ipcMain.handle('notify:post', (_e, notice: { title: string; body: string; tag: string }) => {

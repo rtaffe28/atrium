@@ -195,6 +195,10 @@ export abstract class SessionStore implements SessionDriver {
       id: uid('t'),
       kind,
       title: kind === 'browser' ? 'New tab' : 'zsh',
+      // Every terminal gets one, not just tabs we launch an agent in: the
+      // command is as likely to be typed by hand, and that tab deserves to
+      // come back too.
+      ...(kind === 'terminal' ? { agentSessionId: crypto.randomUUID() } : {}),
       ...partial,
     };
   }

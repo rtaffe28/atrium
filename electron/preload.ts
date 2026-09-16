@@ -31,6 +31,7 @@ const bridge = {
       rows: number;
       shell?: string;
       args?: string[];
+      env?: Record<string, string>;
     }): Promise<{ pid: number }> => ipcRenderer.invoke('pty:spawn', options),
 
     replay: (id: string): Promise<string> => ipcRenderer.invoke('pty:replay', id),
@@ -53,6 +54,11 @@ const bridge = {
       ipcRenderer.on('pty:exit', listener);
       return () => ipcRenderer.off('pty:exit', listener);
     },
+  },
+
+  agent: {
+    hasSession: (sessionId: string): Promise<boolean> =>
+      ipcRenderer.invoke('agent:has-session', sessionId),
   },
 
   notify: {

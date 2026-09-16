@@ -18,6 +18,7 @@ export interface AtriumBridge {
       rows: number;
       shell?: string;
       args?: string[];
+      env?: Record<string, string>;
     }): Promise<{ pid: number }>;
     replay(id: string): Promise<string>;
     foreground(): Promise<Record<string, string>>;
@@ -28,6 +29,7 @@ export interface AtriumBridge {
     onData(handler: (id: string, data: string) => void): () => void;
     onExit(handler: (id: string, code: number) => void): () => void;
   };
+  agent: { hasSession(sessionId: string): Promise<boolean> };
   notify: { post(notice: { title: string; body: string; tag: string }): Promise<void> };
   workspace: {
     load(): Promise<PersistedWorkspace | null>;

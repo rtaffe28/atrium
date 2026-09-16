@@ -33,6 +33,15 @@ export interface Tab {
    * hunting for the session you had.
    */
   command?: string;
+  /**
+   * A stable id for the agent conversation in this tab.
+   *
+   * Handed to Claude Code as --session-id the first time, and used to resume
+   * exactly that conversation afterwards. Deciding the id up front is what
+   * makes restore exact; discovering it later cannot distinguish two agents
+   * working in the same directory.
+   */
+  agentSessionId?: string;
   /** Terminal tabs running an agent. Drives the rail and notifications. */
   agentState?: AgentState;
   /** Browser tabs only. */
@@ -88,6 +97,15 @@ export interface CreateSessionOptions {
   branch: string;
   /** Command to run in the session's first tab. Blank means a plain shell. */
   command?: string;
+  /**
+   * A stable id for the agent conversation in this tab.
+   *
+   * Handed to Claude Code as --session-id the first time, and used to resume
+   * exactly that conversation afterwards. Deciding the id up front is what
+   * makes restore exact; discovering it later cannot distinguish two agents
+   * working in the same directory.
+   */
+  agentSessionId?: string;
   /** Seed the session with this tab instead of a fresh agent terminal. */
   adopt?: Tab;
 }

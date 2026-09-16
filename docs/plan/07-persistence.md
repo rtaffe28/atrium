@@ -46,24 +46,46 @@ byte. The first chunk is usually a partial line or terminal setup rather than a
 prompt, and characters sent then are mangled by a line editor that is not ready
 yet.
 
-## Overrides, because only the agent knows how to resume itself
+## Decide the session id, do not discover it
 
-A restored `claude` that opens a blank conversation is a restored tab with no
-value. So captured commands are rewritten on the way back in, from a mapping in
-Settings → Restoring a session:
+A restored agent is only worth anything if it comes back as *the same*
+conversation. The first attempt used `--continue`, which resumes whichever
+conversation ran most recently in that directory — already wrong with two tabs
+open on one repo, and no help at all for a session you started by hand.
 
-```
-claude = claude --continue
-```
+So Atrium stops trying to work out which conversation a tab had and decides it
+instead. Every terminal tab is given a uuid when it is created, and the command
+is rewritten on the way to the shell:
 
-This is a mapping rather than something the app is clever about, because the
-resume flag is the agent's business and guessing it for tools we have never
-seen would be worse than asking.
+- first run: `claude --session-id <uuid>` — the tab claims the conversation
+- afterwards: `claude --resume <uuid>` — the tab reopens its own
 
-**A limitation to know:** `--continue` resumes the most recent conversation *in
-that directory*. Two claude tabs in the same directory will both resume the
-same one. Targeting a specific conversation needs its session id, which means
-capturing something the agent does not currently tell us.
+Which of the two is chosen comes from the main process, because Claude Code
+keeps one JSONL per conversation under `~/.claude/projects` named by session
+id, so "has this run before" is just whether that file exists. An explicit
+`--resume`, `--continue` or `--session-id` from the user always wins; they may
+be deliberately opening something else in that tab.
+
+`restoreOverrides` in Settings stays for tools that need a different command on
+restore, but is empty by default — a rewrite to `--continue` would now be
+*less* accurate than the id, and would override it.
+
+### Why this is done by rewriting the command, not by a shim
+
+The first version put a `claude` wrapper on the session's PATH, which is how
+cmux does it. That does not survive a login shell: `.zshrc` rebuilds PATH after
+we set it, and a `~/.local/bin/claude` prepended there wins. Measured directly
+— `command -v claude` inside a spawned session resolved to the real binary, not
+the shim.
+
+Rewriting the command Atrium types has no such problem. The shim is still
+installed, and still binds sessions on setups whose rc files leave PATH alone,
+but it is a fallback rather than the mechanism.
+
+**The gap that remains:** a `claude` you type yourself in a tab is only bound
+if the shim wins PATH. Closing that properly means shell integration — pointing
+the shell at our own rc that sources the user's and then fixes PATH — which is
+what editors do and is a larger piece of work.
 
 ## Replayed scrollback is not inert
 

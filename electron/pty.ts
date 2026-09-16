@@ -1,5 +1,6 @@
 import { spawn, type IPty } from 'node-pty';
 import type { WebContents } from 'electron';
+import { shimDirectory } from './shims';
 
 export interface SpawnOptions {
   id: string;
@@ -8,6 +9,8 @@ export interface SpawnOptions {
   cwd: string;
   cols: number;
   rows: number;
+  /** Extra variables for this session only — the agent session id lives here. */
+  env?: Record<string, string>;
 }
 
 interface Entry {
@@ -42,12 +45,22 @@ export class PtyManager {
         ? process.env.COMSPEC ?? 'powershell.exe'
         : this.env.SHELL ?? '/bin/zsh');
 
+    // The shim directory goes first so `claude` resolves to our wrapper.
+    const shims = shimDirectory();
+    const path = shims ? `${shims}:${this.env.PATH ?? ''}` : this.env.PATH;
+
     const term = spawn(shell, options.args ?? [], {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd,
-      env: { ...this.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+      env: {
+        ...this.env,
+        ...(options.env ?? {}),
+        ...(path ? { PATH: path } : {}),
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+      },
     });
 
     const entry: Entry = { pty: term, buffer: '' };

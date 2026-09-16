@@ -1,5 +1,7 @@
 import { SessionStore } from '../../session/store';
 import type { AgentState, DataHandler, Unsubscribe } from '../../session/types';
+import { withSessionFlag } from '../../session/agentFlags';
+import { newBellScan, scanForBell, type BellScan } from '../../session/bell';
 import { plausibleCommand } from '../../session/command';
 import { sanitizeHistory } from '../../session/history';
 import type { Session } from '../../session/types';
@@ -30,6 +32,17 @@ interface Stream {
   buffer: string;
   listeners: Set<DataHandler>;
   settle: number;
+  /** Carried across chunks: a sequence can be split between two reads. */
+  bell: BellScan;
+  /**
+   * The agent rang and has not been answered.
+   *
+   * Latched rather than derived from the latest output, because an agent rings
+   * the bell and *then* prints its question — so the next chunk would
+   * immediately overwrite "needs you" with "working" and the state would never
+   * survive long enough to be useful.
+   */
+  awaitingHuman: boolean;
 }
 
 /**
@@ -77,6 +90,8 @@ export class ElectronSessionDriver extends SessionStore {
     this.shellName = shell.split('/').pop() ?? 'zsh';
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
     this.bridge.pty.onExit((tabId) => {
+      const stream = this.streams.get(tabId);
+      if (stream) stream.awaitingHuman = false;
       this.setAgentState(tabId, undefined);
       this.agents.delete(tabId);
     });
@@ -164,7 +179,13 @@ export class ElectronSessionDriver extends SessionStore {
   private stream(tabId: string): Stream {
     let stream = this.streams.get(tabId);
     if (!stream) {
-      stream = { buffer: '', listeners: new Set(), settle: 0 };
+      stream = {
+        buffer: '',
+        listeners: new Set(),
+        settle: 0,
+        bell: newBellScan(),
+        awaitingHuman: false,
+      };
       this.streams.set(tabId, stream);
     }
     return stream;
@@ -190,11 +211,16 @@ export class ElectronSessionDriver extends SessionStore {
 
     if (!this.agents.has(tabId)) return;
 
-    if (data.includes('\x07')) {
+    if (scanForBell(data, stream.bell)) {
+      stream.awaitingHuman = true;
       this.setAgentState(tabId, 'waiting');
       window.clearTimeout(stream.settle);
       return;
     }
+
+    // Output after the bell is the agent explaining what it wants; it is not
+    // evidence that the agent stopped waiting. Only the human is.
+    if (stream.awaitingHuman) return;
 
     this.setAgentState(tabId, 'working');
     window.clearTimeout(stream.settle);
@@ -214,6 +240,10 @@ export class ElectronSessionDriver extends SessionStore {
     const wanted = command?.trim();
     if (wanted) this.agents.add(tabId);
 
+    // The shim in this session's PATH reads this and binds the conversation to
+    // it, so the tab and the agent session stay the same thing across restarts.
+    const agentSession = this.sessionOfTab(tabId)?.tabs[tabId]?.agentSessionId;
+
     // Always spawn the shell, then type the command into it. Replacing the
     // shell would mean the tab vanishes the moment the command exits, and it
     // would lose quoting and arguments that the shell parses for free.
@@ -222,10 +252,23 @@ export class ElectronSessionDriver extends SessionStore {
       cwd: cwd.startsWith('~') ? cwd.replace('~', this.home) : cwd,
       cols: 80,
       rows: 24,
+      ...(agentSession ? { env: { ATRIUM_AGENT_SESSION: agentSession } } : {}),
     });
 
     if (wanted && wanted !== this.shellName) {
+      // Queued straight away so a fast-starting shell is never typed into
+      // before there is anything to type, then rewritten once the main process
+      // says whether this conversation already exists.
       this.autorun.set(tabId, { command: wanted, timer: 0 });
+      if (agentSession) {
+        void this.bridge.agent
+          .hasSession(agentSession)
+          .then((exists) => {
+            const queued = this.autorun.get(tabId);
+            if (queued) queued.command = withSessionFlag(wanted, agentSession, exists);
+          })
+          .catch(() => {});
+      }
     }
   }
 
@@ -266,6 +309,12 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   write(tabId: string, data: string): void {
+    // Typing is the answer the agent was waiting for.
+    const stream = this.streams.get(tabId);
+    if (stream?.awaitingHuman) {
+      stream.awaitingHuman = false;
+      this.setAgentState(tabId, 'working');
+    }
     this.captureTyping(tabId, data);
     // A real PTY echoes; unlike the mock we must not echo ourselves.
     this.bridge.pty.write(tabId, data);
