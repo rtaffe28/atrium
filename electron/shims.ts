@@ -43,12 +43,7 @@ function makeDirectory(name: string): string {
  * launched by us, and a wrapper on PATH is the only place to intervene in that.
  */
 
-const CODEX_SHIM = `#!/bin/bash
-# Atrium shim. Codex cannot be told its session id up front — there is no
-# --session-id — so Atrium discovers the id after the first run and passes it
-# back here, which turns a bare \`codex\` into a resume of this tab's thread.
-
-self_dir="$(cd "$(dirname "$0")" && pwd)"
+const PREAMBLE = `self_dir="$(cd "$(dirname "$0")" && pwd)"
 clean=""
 old_ifs="$IFS"
 IFS=:
@@ -58,43 +53,23 @@ for entry in $PATH; do
 done
 IFS="$old_ifs"
 export PATH="$clean"
-
-real="$(command -v codex 2>/dev/null)"
-if [ -z "$real" ]; then
-  echo "atrium: codex is not on PATH" >&2
-  exit 127
-fi
-
-# A subcommand means the user is driving — resume, exec, login, anything.
-case "\${1:-}" in
-  ""|-*) ;;
-  *) exec "$real" "$@" ;;
-esac
-
-if [ -z "\${ATRIUM_CODEX_SESSION:-}" ]; then
-  exec "$real" "$@"
-fi
-exec "$real" resume "$ATRIUM_CODEX_SESSION" "$@"
 `;
 
+/**
+ * Resuming is a one-shot event, not a property of the tab.
+ *
+ * Binding a tab permanently to one conversation is wrong: after you exit an
+ * agent and start it again, you want a new conversation, not the old one back.
+ * Only Atrium restoring the tab means "reopen what was there".
+ *
+ * So Atrium leaves a \`resume\` marker for exactly that case, and the shim
+ * consumes it — deleting it as it goes, so the next invocation in the same tab
+ * starts fresh. Each run writes the id it ended up using to \`current\`, which
+ * is how Atrium learns which conversation a tab is on without asking the agent.
+ */
 const CLAUDE_SHIM = `#!/bin/bash
-# Atrium shim. Binds this terminal's Claude Code conversation to a stable id so
-# the session can be restored exactly, rather than by "most recent here".
-
-self_dir="$(cd "$(dirname "$0")" && pwd)"
-
-# Drop ourselves from PATH before looking for the real binary, or this execs
-# itself forever.
-clean=""
-old_ifs="$IFS"
-IFS=:
-for entry in $PATH; do
-  [ "$entry" = "$self_dir" ] && continue
-  clean="\${clean:+$clean:}$entry"
-done
-IFS="$old_ifs"
-export PATH="$clean"
-
+# Atrium shim for Claude Code.
+${PREAMBLE}
 real="$(command -v claude 2>/dev/null)"
 if [ -z "$real" ]; then
   echo "atrium: claude is not on PATH" >&2
@@ -108,17 +83,53 @@ for arg in "$@"; do
   esac
 done
 
-if [ -z "\${ATRIUM_AGENT_SESSION:-}" ]; then
+state="\${ATRIUM_SESSION_STATE:-}"
+if [ -z "$state" ]; then
   exec "$real" "$@"
 fi
+mkdir -p "$state" 2>/dev/null
 
-# If this id already has a transcript, resume it; otherwise claim it. Checking
-# rather than being told means a restored tab and a fresh one run the same
-# command and still do the right thing.
-if ls "$HOME"/.claude/projects/*/"$ATRIUM_AGENT_SESSION".jsonl >/dev/null 2>&1; then
-  exec "$real" --resume "$ATRIUM_AGENT_SESSION" "$@"
+if [ -f "$state/resume" ]; then
+  id="$(cat "$state/resume" 2>/dev/null)"
+  rm -f "$state/resume"
+  if [ -n "$id" ]; then
+    printf '%s' "$id" > "$state/current"
+    exec "$real" --resume "$id" "$@"
+  fi
 fi
-exec "$real" --session-id "$ATRIUM_AGENT_SESSION" "$@"
+
+# A fresh conversation, with an id Atrium can restore later.
+id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+printf '%s' "$id" > "$state/current"
+exec "$real" --session-id "$id" "$@"
+`;
+
+const CODEX_SHIM = `#!/bin/bash
+# Atrium shim for Codex. Codex cannot be told an id, only asked to resume one
+# it already made, so a fresh run is left completely alone and Atrium observes
+# the thread afterwards from the rollout file codex writes.
+${PREAMBLE}
+real="$(command -v codex 2>/dev/null)"
+if [ -z "$real" ]; then
+  echo "atrium: codex is not on PATH" >&2
+  exit 127
+fi
+
+# A subcommand means the user is driving.
+case "\${1:-}" in
+  ""|-*) ;;
+  *) exec "$real" "$@" ;;
+esac
+
+state="\${ATRIUM_SESSION_STATE:-}"
+if [ -n "$state" ] && [ -f "$state/resume-codex" ]; then
+  id="$(cat "$state/resume-codex" 2>/dev/null)"
+  rm -f "$state/resume-codex"
+  if [ -n "$id" ]; then
+    exec "$real" resume "$id" "$@"
+  fi
+fi
+exec "$real" "$@"
 `;
 
 let cached: string | null = null;

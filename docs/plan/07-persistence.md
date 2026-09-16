@@ -57,22 +57,28 @@ So Atrium stops trying to work out which conversation a tab had and binds the
 two together. The two agents need opposite approaches, because their CLIs
 differ.
 
-**Claude Code takes `--session-id`**, so the id is decided before the agent
-ever runs. Every terminal tab is given a uuid when it is created, and the
-command is rewritten on the way to the shell:
+### Resuming is an event, not a property of the tab
 
-- first run: `claude --session-id <uuid>` — the tab claims the conversation
-- afterwards: `claude --resume <uuid>` — the tab reopens its own
+The first version bound a tab permanently to one conversation, and that is
+wrong in an obvious way once you use it: exit an agent, start it again, and you
+get the old conversation back instead of a new one. Only *Atrium restoring the
+tab* means "reopen what was there".
 
-Which of the two is chosen comes from the main process, because Claude Code
-keeps one JSONL per conversation under `~/.claude/projects` named by session
-id, so "has this run before" is just whether that file exists.
+So the tab's shim is armed with a `resume` marker, and only when the workspace
+is being restored. The shim consumes that marker — deleting it as it goes — so
+the next run in the same tab starts fresh. Every run writes the id it ended up
+using to a `current` file, which is how Atrium learns which conversation a tab
+is on without asking the agent, including after you have started a new one.
 
-**Codex has no equivalent.** Its id can only be observed, from the rollout file
-it writes at `~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<uuid>.jsonl`. So a
-fresh codex tab runs plainly, Atrium notices the thread that appeared *after
-that tab spawned* — which is what stops two codex tabs claiming each other's —
-and only restores are rewritten, to `codex resume <uuid>`.
+**Claude Code takes `--session-id`**, so the shim can decide: consume a marker
+and `--resume <id>`, or mint a fresh uuid and `--session-id <uuid>`.
+
+**Codex has no equivalent**, so its fresh runs are left completely alone. Its
+id can only be observed, from the rollout file it writes at
+`~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<uuid>.jsonl`; Atrium notices the
+thread that appeared *after that tab spawned*, which is what stops two codex
+tabs claiming each other's. Only a restore arms its marker, and the shim turns
+that into `codex resume <uuid>` once.
 
 An explicit choice from the user always wins in both cases: `--resume`,
 `--continue` or `--session-id` for Claude Code, and any subcommand for codex.

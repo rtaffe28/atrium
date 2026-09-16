@@ -1,14 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { shimDirectory } from './shims';
 
 /**
- * The shim is a shell script, so it is tested by running it against a stub
- * `claude` that prints its arguments. Asserting on the text of the script
- * would prove nothing about what it actually does with a real PATH.
+ * The shims are shell scripts, so they are tested by running them against stub
+ * agents that print their arguments. Asserting on the text of the scripts
+ * would prove nothing about what they do with a real PATH.
  */
 const shims = shimDirectory()!;
 const fakeBin = mkdtempSync(join(tmpdir(), 'atrium-fakebin-'));
@@ -17,98 +17,94 @@ for (const name of ['claude', 'codex']) {
   chmodSync(join(fakeBin, name), 0o755);
 }
 
-const home = mkdtempSync(join(tmpdir(), 'atrium-fakehome-'));
-
-afterAll(() => {
-  rmSync(fakeBin, { recursive: true, force: true });
-  rmSync(home, { recursive: true, force: true });
+let state: string;
+beforeEach(() => {
+  state = mkdtempSync(join(tmpdir(), 'atrium-state-'));
 });
 
-function runShim(args: string[], env: Record<string, string> = {}, name = 'claude'): string {
+afterAll(() => rmSync(fakeBin, { recursive: true, force: true }));
+
+function run(name: string, args: string[] = [], withState = true): string {
   return execFileSync('/bin/bash', [join(shims, name), ...args], {
     encoding: 'utf8',
-    env: { PATH: `${shims}:${fakeBin}:/usr/bin:/bin`, HOME: home, ...env },
+    env: {
+      PATH: `${shims}:${fakeBin}:/usr/bin:/bin`,
+      HOME: state,
+      ...(withState ? { ATRIUM_SESSION_STATE: state } : {}),
+    },
   }).trim();
 }
 
-function giveSessionATranscript(id: string) {
-  const dir = join(home, '.claude', 'projects', '-some-project');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${id}.jsonl`), '{}');
-}
+const armResume = (id: string, file = 'resume') => writeFileSync(join(state, file), id);
+const currentId = () => readFileSync(join(state, 'current'), 'utf8').trim();
 
 describe('the claude shim', () => {
-  it('passes straight through when no session is assigned', () => {
-    expect(runShim(['--model', 'opus'])).toBe('claude --model opus');
+  it('passes through when Atrium is not managing the session', () => {
+    expect(run('claude', ['--model', 'opus'], false)).toBe('claude --model opus');
   });
 
-  it('claims the assigned id the first time the session runs', () => {
-    expect(runShim(['--model', 'opus'], { ATRIUM_AGENT_SESSION: 'fresh-1' })).toBe(
-      'claude --session-id fresh-1 --model opus',
+  it('starts a new conversation with an id Atrium can restore later', () => {
+    const out = run('claude');
+    expect(out).toMatch(/^claude --session-id [0-9a-f-]{36}$/);
+    expect(out).toContain(currentId());
+  });
+
+  it('reopens the conversation Atrium armed it with', () => {
+    armResume('old-thread');
+    expect(run('claude')).toBe('claude --resume old-thread');
+    expect(currentId()).toBe('old-thread');
+  });
+
+  /**
+   * The bug this replaced: the tab was welded to one conversation, so exiting
+   * an agent and starting it again reopened the old one instead of beginning a
+   * new one. Resuming is a single event, not a property of the tab.
+   */
+  it('only resumes once, then starts fresh', () => {
+    armResume('old-thread');
+    expect(run('claude')).toBe('claude --resume old-thread');
+
+    const second = run('claude');
+    expect(second).not.toContain('old-thread');
+    expect(second).toMatch(/^claude --session-id [0-9a-f-]{36}$/);
+    expect(existsSync(join(state, 'resume'))).toBe(false);
+  });
+
+  it('records each new conversation, so the next restore reopens that one', () => {
+    run('claude');
+    const first = currentId();
+    run('claude');
+    expect(currentId()).not.toBe(first);
+  });
+
+  it('keeps the rest of the command line', () => {
+    expect(run('claude', ['--dangerously-skip-permissions'])).toMatch(
+      /^claude --session-id [0-9a-f-]{36} --dangerously-skip-permissions$/,
     );
-  });
-
-  /** The whole point: the same tab comes back as the same conversation. */
-  it('resumes that exact conversation once it has a transcript', () => {
-    giveSessionATranscript('known-2');
-    expect(runShim([], { ATRIUM_AGENT_SESSION: 'known-2' })).toBe('claude --resume known-2');
   });
 
   it('does not override a session the user chose', () => {
-    expect(runShim(['--resume', 'theirs'], { ATRIUM_AGENT_SESSION: 'ours' })).toBe(
-      'claude --resume theirs',
-    );
-    expect(runShim(['--continue'], { ATRIUM_AGENT_SESSION: 'ours' })).toBe('claude --continue');
-    expect(runShim(['--session-id', 'theirs'], { ATRIUM_AGENT_SESSION: 'ours' })).toBe(
-      'claude --session-id theirs',
-    );
-  });
-
-  /** A shim that finds itself on PATH execs itself forever. */
-  it('removes itself from PATH before looking for the real binary', () => {
-    expect(runShim([], { ATRIUM_AGENT_SESSION: 'x' })).toContain('claude --session-id x');
-  });
-
-  it('fails clearly when claude is not installed', () => {
-    let message = '';
-    try {
-      execFileSync('/bin/bash', [join(shims, 'claude')], {
-        encoding: 'utf8',
-        env: { PATH: `${shims}:/usr/bin:/bin`, HOME: home },
-        stdio: 'pipe',
-      });
-    } catch (error) {
-      message = String((error as { stderr?: string }).stderr ?? '');
+    armResume('ours');
+    for (const flag of [['--resume', 'theirs'], ['--continue'], ['--session-id', 'theirs']]) {
+      expect(run('claude', flag)).toBe(`claude ${flag.join(' ')}`);
     }
-    expect(message).toContain('claude is not on PATH');
   });
 });
 
 describe('the codex shim', () => {
-  const codex = (args: string[], env: Record<string, string> = {}) =>
-    runShim(args, env, 'codex');
-
-  it('passes straight through when no thread is known', () => {
-    expect(codex(['--model', 'gpt-5'])).toBe('codex --model gpt-5');
+  /** Codex cannot be told an id, so a fresh run must be left entirely alone. */
+  it('leaves a new session untouched', () => {
+    expect(run('codex', ['--model', 'gpt-5'])).toBe('codex --model gpt-5');
   });
 
-  /**
-   * Codex cannot be told an id, so a fresh run is plain and only a restore —
-   * where Atrium has since observed the thread — becomes a resume.
-   */
-  it('resumes the thread this tab owns', () => {
-    expect(codex([], { ATRIUM_CODEX_SESSION: 'thread-9' })).toBe('codex resume thread-9');
-  });
-
-  it('keeps flags, which codex resume also accepts', () => {
-    expect(codex(['--dangerously-bypass-approvals-and-sandbox'], {
-      ATRIUM_CODEX_SESSION: 'thread-9',
-    })).toBe('codex resume thread-9 --dangerously-bypass-approvals-and-sandbox');
+  it('reopens the thread Atrium armed it with, once', () => {
+    armResume('thread-7', 'resume-codex');
+    expect(run('codex')).toBe('codex resume thread-7');
+    expect(run('codex')).toBe('codex');
   });
 
   it('stays out of the way of a subcommand', () => {
-    for (const sub of ['resume', 'exec', 'login', 'apply']) {
-      expect(codex([sub], { ATRIUM_CODEX_SESSION: 'thread-9' })).toBe(`codex ${sub}`);
-    }
+    armResume('thread-7', 'resume-codex');
+    expect(run('codex', ['exec'])).toBe('codex exec');
   });
 });

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
-import { readFile, writeFile, rename, readdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, rename, readdir, stat, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
@@ -154,35 +154,35 @@ app.whenReady().then(async () => {
     await rename(temporary, workspaceFile);
   });
 
-  /**
-   * Has this agent conversation been started before?
-   *
-   * Claude Code keeps one JSONL per conversation under ~/.claude/projects,
-   * named by session id, so the answer is simply whether that file exists.
-   * It decides whether a tab claims its id or resumes it.
-   */
-  ipcMain.handle('agent:has-session', async (_e, sessionId: string) => {
-    if (!/^[A-Za-z0-9-]{8,}$/.test(sessionId)) return false;
-    const root = path.join(env.HOME ?? '', '.claude', 'projects');
-    try {
-      for (const project of await readdir(root)) {
-        const files = await readdir(path.join(root, project)).catch(() => []);
-        if (files.includes(`${sessionId}.jsonl`)) return true;
-      }
-    } catch {
-      // No projects directory yet: nothing has ever been started.
-    }
-    return false;
-  });
+  const sessionState = (tabId: string) =>
+    path.join(app.getPath('userData'), 'sessions', tabId.replace(/[^\w-]/g, ''));
 
   /**
-   * The id of the Codex session a tab just started.
+   * Arm a tab to resume, once.
    *
-   * Codex has no --session-id, so the id can only be observed: it writes
-   * ~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<uuid>.jsonl, and the newest
-   * one created since the tab spawned is that tab's. Passing `since` is what
-   * keeps two codex tabs from claiming each other's thread.
+   * Only Atrium restoring a tab means "reopen what was there". Running an agent
+   * again by hand should start a new conversation, so the marker is consumed by
+   * the shim on the next invocation and not replaced.
    */
+  ipcMain.handle(
+    'agent:prepare-session',
+    async (_e, tabId: string, resume: { claude?: string; codex?: string }) => {
+      const dir = sessionState(tabId);
+      await mkdir(dir, { recursive: true }).catch(() => {});
+      await rm(path.join(dir, 'resume'), { force: true }).catch(() => {});
+      await rm(path.join(dir, 'resume-codex'), { force: true }).catch(() => {});
+      if (resume.claude) await writeFile(path.join(dir, 'resume'), resume.claude, 'utf8');
+      if (resume.codex) await writeFile(path.join(dir, 'resume-codex'), resume.codex, 'utf8');
+      return dir;
+    },
+  );
+
+  /** Which conversation the tab is actually on, as reported by the shim. */
+  ipcMain.handle('agent:current-session', async (_e, tabId: string) => {
+    const file = path.join(sessionState(tabId), 'current');
+    return (await readFile(file, 'utf8').catch(() => '')).trim() || null;
+  });
+
   ipcMain.handle('agent:newest-codex-session', async (_e, since: number) => {
     const root = path.join(env.HOME ?? '', '.codex', 'sessions');
     const uuid = /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;

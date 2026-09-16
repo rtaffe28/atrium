@@ -30,7 +30,8 @@ export interface AtriumBridge {
     onExit(handler: (id: string, code: number) => void): () => void;
   };
   agent: {
-    hasSession(sessionId: string): Promise<boolean>;
+    prepareSession(tabId: string, resume: { claude?: string; codex?: string }): Promise<string>;
+    currentSession(tabId: string): Promise<string | null>;
     newestCodexSession(since: number): Promise<string | null>;
   };
   notify: { post(notice: { title: string; body: string; tag: string }): Promise<void> };

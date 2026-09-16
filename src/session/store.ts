@@ -51,7 +51,12 @@ export abstract class SessionStore implements SessionDriver {
    * `command` is run inside the shell rather than replacing it, so when it
    * exits you are left at a prompt instead of watching the tab disappear.
    */
-  protected abstract openTerminal(tabId: string, cwd: string, command?: string): void;
+  protected abstract openTerminal(
+    tabId: string,
+    cwd: string,
+    command?: string,
+    restoring?: boolean,
+  ): void;
   /** Tear it down. Called for every tab of a killed session too. */
   protected abstract closeTerminal(tabId: string): void;
 
@@ -173,7 +178,9 @@ export abstract class SessionStore implements SessionDriver {
         if (tab.kind !== 'terminal') continue;
         this.primeScrollback(tab.id, scrollback[tab.id] ?? '');
         // What was actually running wins over what the tab was created as.
-        this.openTerminal(tab.id, session.cwd, tab.command ?? tab.agent);
+        // `restoring` is the only case that should reopen a past conversation;
+        // running an agent again by hand starts a new one.
+        this.openTerminal(tab.id, session.cwd, tab.command ?? tab.agent, true);
       }
     }
   }

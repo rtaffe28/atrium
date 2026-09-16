@@ -1,6 +1,5 @@
 import { SessionStore } from '../../session/store';
 import type { AgentState, DataHandler, Unsubscribe } from '../../session/types';
-import { agentOf, withSessionFlag } from '../../session/agentFlags';
 import { newBellScan, scanForBell, type BellScan } from '../../session/bell';
 import { plausibleCommand } from '../../session/command';
 import { sanitizeHistory } from '../../session/history';
@@ -84,12 +83,14 @@ export class ElectronSessionDriver extends SessionStore {
   private home: string;
 
   private shellName: string;
+  private stateRoot = '';
 
   constructor(bridge: AtriumBridge, home: string, shell: string, restore?: RestoreInput) {
     super();
     this.bridge = bridge;
     this.home = home;
     this.shellName = shell.split('/').pop() ?? 'zsh';
+    this.stateRoot = `${home}/Library/Application Support/atrium/sessions`;
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
     this.bridge.pty.onExit((tabId) => {
       const stream = this.streams.get(tabId);
@@ -127,6 +128,11 @@ export class ElectronSessionDriver extends SessionStore {
    * a fallback for a tab nobody typed in. That is also better for wrappers:
    * `npm run dev` is a more useful thing to restore than `node`.
    */
+  /** Where the shim reports what this tab is running. */
+  private stateDir(tabId: string): string {
+    return `${this.stateRoot}/${tabId.replace(/[^\w-]/g, '')}`;
+  }
+
   async refreshCommands(): Promise<void> {
     let foreground: Record<string, string>;
     try {
@@ -148,6 +154,22 @@ export class ElectronSessionDriver extends SessionStore {
         const title = idle
           ? this.shellName
           : (command?.split(/\s+/)[0] ?? plausibleCommand(running) ?? running);
+
+        // The shim writes the conversation it opened, which is how a tab
+        // learns its id without the agent being asked — including after the
+        // user exited and started a new one.
+        if (running !== this.shellName) {
+          void this.bridge.agent
+            .currentSession(tab.id)
+            .then((agentSessionId) => {
+              if (!agentSessionId || agentSessionId === tab.agentSessionId) return;
+              this.update(session.id, (s) => ({
+                ...s,
+                tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], agentSessionId } },
+              }));
+            })
+            .catch(() => {});
+        }
 
         // Codex writes its thread id only after it starts, so this is the
         // first moment the tab can learn which conversation it owns.
@@ -253,14 +275,23 @@ export class ElectronSessionDriver extends SessionStore {
     }));
   }
 
-  protected openTerminal(tabId: string, cwd: string, command?: string): void {
+  protected openTerminal(
+    tabId: string,
+    cwd: string,
+    command?: string,
+    restoring = false,
+  ): void {
     const wanted = command?.trim();
     if (wanted) this.agents.add(tabId);
 
-    // The shim in this session's PATH reads this and binds the conversation to
-    // it, so the tab and the agent session stay the same thing across restarts.
     const tab = this.sessionOfTab(tabId)?.tabs[tabId];
-    const agentSession = tab?.agentSessionId;
+    // Arm a resume only when the tab is being restored. The shim consumes the
+    // marker on the next agent run and does not replace it, so exiting an agent
+    // and starting it again gives a new conversation rather than the old one.
+    void this.bridge.agent.prepareSession(
+      tabId,
+      restoring ? { claude: tab?.agentSessionId, codex: tab?.codexSessionId } : {},
+    );
 
     // Always spawn the shell, then type the command into it. Replacing the
     // shell would mean the tab vanishes the moment the command exits, and it
@@ -270,10 +301,7 @@ export class ElectronSessionDriver extends SessionStore {
       cwd: cwd.startsWith('~') ? cwd.replace('~', this.home) : cwd,
       cols: 80,
       rows: 24,
-      env: {
-        ...(agentSession ? { ATRIUM_AGENT_SESSION: agentSession } : {}),
-        ...(tab?.codexSessionId ? { ATRIUM_CODEX_SESSION: tab.codexSessionId } : {}),
-      },
+      env: { ATRIUM_SESSION_STATE: this.stateDir(tabId) },
     });
     this.spawnedAt.set(tabId, Date.now());
 
@@ -282,24 +310,6 @@ export class ElectronSessionDriver extends SessionStore {
       // before there is anything to type, then rewritten once the main process
       // says whether this conversation already exists.
       this.autorun.set(tabId, { command: wanted, timer: 0 });
-
-      const codexSession = tab?.codexSessionId;
-      const bind = (claudeExists: boolean) => {
-        const queued = this.autorun.get(tabId);
-        if (queued) {
-          queued.command = withSessionFlag(wanted, {
-            claude: agentSession,
-            codex: codexSession,
-            claudeExists,
-          });
-        }
-      };
-
-      if (agentOf(wanted) === 'claude' && agentSession) {
-        void this.bridge.agent.hasSession(agentSession).then(bind).catch(() => bind(false));
-      } else {
-        bind(false);
-      }
     }
   }
 

@@ -28,6 +28,11 @@ function fakeBridge() {
       },
       onExit: () => () => {},
     },
+    agent: {
+      prepareSession: vi.fn(async () => '/tmp/state'),
+      currentSession: vi.fn(async () => null),
+      newestCodexSession: vi.fn(async () => null),
+    },
     notify: { post: vi.fn() },
     workspace: { load: vi.fn(), save: vi.fn() },
     window: { onState: () => () => {} },
