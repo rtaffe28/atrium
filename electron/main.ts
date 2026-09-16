@@ -12,6 +12,13 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 let ptys: PtyManager;
 let loginShellName = 'zsh';
 
+// A development run and the installed app are the same app by name, and macOS
+// volumes are case-insensitive, so they share one workspace.json, one
+// scrollback store and one shim directory. That only matters once you develop
+// Atrium inside Atrium — at which point testing a build silently overwrites
+// the workspace you were working in. Must run before `ready`.
+if (!app.isPackaged) app.setPath('userData', `${app.getPath('userData')}-dev`);
+
 /**
  * Space to leave clear of the OS window controls.
  *
