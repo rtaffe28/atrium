@@ -201,7 +201,7 @@ export abstract class SessionStore implements SessionDriver {
     return {
       id: uid('t'),
       kind,
-      title: kind === 'browser' ? 'New tab' : kind === 'files' ? 'Files' : 'zsh',
+      title: kind === 'browser' ? 'New tab' : 'zsh',
       // Every terminal gets one, not just tabs we launch an agent in: the
       // command is as likely to be typed by hand, and that tab deserves to
       // come back too.
@@ -299,9 +299,7 @@ export abstract class SessionStore implements SessionDriver {
     const tab =
       kind === 'browser'
         ? this.makeTab('browser', { title: 'New tab', url: 'http://localhost:5173/' })
-        : kind === 'files'
-          ? this.makeTab('files', { title: 'Files' })
-          : this.makeTab('terminal', { title: 'zsh' });
+        : this.makeTab('terminal', { title: 'zsh' });
 
     this.update(sessionId, (s) => ({
       ...s,

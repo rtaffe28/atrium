@@ -16,7 +16,7 @@ export type AgentState = 'working' | 'waiting' | 'done' | 'error';
 /** A session's state is derived from its agent tabs — see deriveSessionState. */
 export type SessionState = AgentState | 'idle';
 
-export type TabKind = 'terminal' | 'browser' | 'files';
+export type TabKind = 'terminal' | 'browser';
 
 export interface Tab {
   id: string;
@@ -53,8 +53,6 @@ export interface Tab {
   agentState?: AgentState;
   /** Browser tabs only. */
   url?: string;
-  /** File tabs only: the folder being browsed, once chosen. */
-  dir?: string;
 }
 
 /** A pane: one tab bar and whichever of its tabs is active. */

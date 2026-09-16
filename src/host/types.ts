@@ -40,8 +40,6 @@ export interface Capabilities {
   pty: boolean;
   /** How embedded web content renders, or 'none' if it cannot. */
   browserSurface: 'webview' | 'iframe' | 'none';
-  /** Reading directories and files from disk. */
-  files: boolean;
   /** OS-level notifications as opposed to in-app ones. */
   nativeNotifications: boolean;
   /** Frameless window with app-drawn chrome. */
@@ -77,30 +75,16 @@ export interface SurfaceDriver {
   subscribe(id: string, handler: (event: SurfaceEvent) => void): Unsubscribe;
 }
 
-// ── files ──────────────────────────────────────────────────────────────────
+// ── choosing a folder ──────────────────────────────────────────────────────
 
-export interface FileEntry {
-  name: string;
-  path: string;
-  directory: boolean;
-}
-
-export interface FileContents {
-  text: string;
-  /** Large files are cut off rather than freezing the renderer. */
-  truncated: boolean;
-}
-
+/**
+ * Asking the user for a directory, natively.
+ *
+ * Resolves to null if they cancel. Typing a path into a text field is the
+ * worse half of this — it is the only way to reach a folder you cannot spell
+ * from memory.
+ */
 export interface FileDriver {
-  list(path: string): Promise<FileEntry[]>;
-  read(path: string): Promise<FileContents>;
-  /**
-   * Ask the user for a directory, natively.
-   *
-   * Resolves to null if they cancel. Typing a path into a text field is the
-   * worse half of this — it is the only way to reach a folder you cannot
-   * remember the spelling of.
-   */
   chooseDirectory(): Promise<string | null>;
 }
 

@@ -1,4 +1,4 @@
-import type { FileContents, FileEntry, PersistedWorkspace } from '../types';
+import type { PersistedWorkspace } from '../types';
 
 /** The shape the preload exposes. Kept here so the renderer has one source. */
 export interface HostInfo {
@@ -35,8 +35,6 @@ export interface AtriumBridge {
     newestCodexSession(since: number): Promise<string | null>;
   };
   files: {
-    list(path: string): Promise<FileEntry[]>;
-    read(path: string): Promise<FileContents>;
     choose(): Promise<string | null>;
   };
   notify: { post(notice: { title: string; body: string; tag: string }): Promise<void> };

@@ -89,20 +89,12 @@ class FileWorkspace implements WorkspaceDriver {
   }
 }
 
-/** Reads through the main process, which is the only side with a filesystem. */
+/** The native folder dialog lives in the main process. */
 class ElectronFiles implements FileDriver {
   private bridge: AtriumBridge;
 
   constructor(bridge: AtriumBridge) {
     this.bridge = bridge;
-  }
-
-  list(path: string) {
-    return this.bridge.files.list(path);
-  }
-
-  read(path: string) {
-    return this.bridge.files.read(path);
   }
 
   chooseDirectory() {
@@ -129,7 +121,6 @@ export class ElectronHost implements Host {
     this.capabilities = {
       pty: true,
       browserSurface: 'webview',
-      files: true,
       // Both are real capabilities of this host that are simply not built yet.
       // Saying false is the honest answer and keeps the UI from offering them.
       nativeNotifications: true,

@@ -4,7 +4,6 @@ import { useDrag } from '../dnd/context';
 import { APPEND, resolvePaneZone } from '../dnd/zones';
 import type { Session, SessionDriver, TabKind } from '../session/types';
 import { BrowserView } from './BrowserView';
-import { FilesView } from './FilesView';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
 
@@ -83,17 +82,6 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
               })
             }
             focusUrlBar={claimFocus(focusRequest ?? null, activeTab.id)}
-          />
-        )}
-        {activeTab?.kind === 'files' && (
-          <FilesView
-            root={activeTab.dir ?? session.cwd}
-            onChooseRoot={(dir) =>
-              driver.patchTab(session.id, activeTab.id, {
-                dir,
-                title: dir.split('/').filter(Boolean).pop() ?? 'Files',
-              })
-            }
           />
         )}
         {!activeTab && <div className="empty">Empty pane</div>}

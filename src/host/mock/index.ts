@@ -1,13 +1,13 @@
 import { MockDriver } from '../../session/mock';
 import type {
   Capabilities,
+  FileDriver,
   Host,
   Platform,
   Unsubscribe,
   WindowDriver,
   WindowState,
 } from '../types';
-import { MockFiles } from './files';
 import { WebNotify } from './notify';
 import { IframeSurfaces } from './surfaces';
 import { LocalStorageWorkspace } from './workspace';
@@ -48,11 +48,18 @@ class BrowserWindowDriver implements WindowDriver {
   }
 }
 
+/** No native dialog in a browser tab, so the one root is the only answer. */
+class BrowserFiles implements FileDriver {
+  async chooseDirectory(): Promise<string | null> {
+    return null;
+  }
+}
+
 export class MockHost implements Host {
   readonly name = 'mock';
   readonly sessions = new MockDriver();
   readonly surfaces = new IframeSurfaces();
-  readonly files = new MockFiles();
+  readonly files = new BrowserFiles();
   readonly notify = new WebNotify();
   readonly window = new BrowserWindowDriver();
   readonly workspace = new LocalStorageWorkspace();
@@ -60,7 +67,6 @@ export class MockHost implements Host {
   readonly capabilities: Capabilities = {
     pty: false,
     browserSurface: 'iframe',
-    files: true,
     nativeNotifications: typeof Notification !== 'undefined',
     customChrome: false,
     persistence: true,
