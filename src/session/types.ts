@@ -53,6 +53,8 @@ export interface Tab {
   agentState?: AgentState;
   /** Browser tabs only. */
   url?: string;
+  /** File tabs only: the folder being browsed, once chosen. */
+  dir?: string;
 }
 
 /** A pane: one tab bar and whichever of its tabs is active. */
@@ -162,7 +164,8 @@ export interface SessionDriver {
   addTab(sessionId: string, groupId: string, kind: TabKind): Tab;
   closeTab(sessionId: string, tabId: string): void;
   activateTab(sessionId: string, groupId: string, tabId: string): void;
-  setTabUrl(sessionId: string, tabId: string, url: string): void;
+  /** Change fields on a tab. One method rather than one per field. */
+  patchTab(sessionId: string, tabId: string, patch: Partial<Tab>): void;
 
   /** The workspace shape, ready to serialise. */
   snapshot(): Session[];

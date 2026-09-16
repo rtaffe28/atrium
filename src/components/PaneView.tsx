@@ -76,11 +76,26 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
         {activeTab?.kind === 'browser' && (
           <BrowserView
             tab={activeTab}
-            onNavigate={(url) => driver.setTabUrl(session.id, activeTab.id, url)}
+            onNavigate={(url) =>
+              driver.patchTab(session.id, activeTab.id, {
+                url,
+                title: url.replace(/^https?:\/\//, '').split('/')[0] || 'New tab',
+              })
+            }
             focusUrlBar={claimFocus(focusRequest ?? null, activeTab.id)}
           />
         )}
-        {activeTab?.kind === 'files' && <FilesView root={session.cwd} />}
+        {activeTab?.kind === 'files' && (
+          <FilesView
+            root={activeTab.dir ?? session.cwd}
+            onChooseRoot={(dir) =>
+              driver.patchTab(session.id, activeTab.id, {
+                dir,
+                title: dir.split('/').filter(Boolean).pop() ?? 'Files',
+              })
+            }
+          />
+        )}
         {!activeTab && <div className="empty">Empty pane</div>}
 
         {splitPreview && <div className={`drop-preview edge-${splitPreview}`} />}

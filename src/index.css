@@ -649,6 +649,8 @@ webview.surface-frame { display: inline-flex; }
   outline: none;
 }
 .setting-input:focus { border-color: var(--accent); }
+.setting-pair { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.setting-pair .setting-input { width: 170px; }
 .setting-input.narrow { width: 88px; font-family: var(--font-ui); }
 .setting-input.area { width: 100%; height: auto; padding: 7px 9px; resize: vertical; }
 .setting-row.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
@@ -698,10 +700,18 @@ webview.surface-frame { display: inline-flex; }
   background: var(--panel);
   overflow: auto;
 }
+.files-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.files-head .ghost-button { flex: 0 0 auto; }
 .files-root {
   margin: 0;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--border-soft);
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.04em;

@@ -211,6 +211,13 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('files:list', (_e, path: string) => listDirectory(path));
   ipcMain.handle('files:read', (_e, path: string) => readTextFile(path));
+  ipcMain.handle('files:choose', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      message: 'Choose a folder to browse',
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
 
   ipcMain.handle('notify:post', (_e, notice: { title: string; body: string; tag: string }) => {
     if (!Notification.isSupported()) return;

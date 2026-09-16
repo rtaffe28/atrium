@@ -70,6 +70,7 @@ const bridge = {
   files: {
     list: (path: string): Promise<unknown> => ipcRenderer.invoke('files:list', path),
     read: (path: string): Promise<unknown> => ipcRenderer.invoke('files:read', path),
+    choose: (): Promise<string | null> => ipcRenderer.invoke('files:choose'),
   },
 
   notify: {

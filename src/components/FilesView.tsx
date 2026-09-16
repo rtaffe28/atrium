@@ -3,8 +3,9 @@ import { useHost } from '../host/context';
 import type { FileEntry } from '../host/types';
 
 interface Props {
-  /** The session's working directory: the explorer is rooted where you work. */
+  /** Defaults to the session's working directory until a folder is chosen. */
   root: string;
+  onChooseRoot: (dir: string) => void;
 }
 
 /**
@@ -14,7 +15,7 @@ interface Props {
  * The tab keeps no state of its own: the root is the session's directory, and
  * which file you were reading is not worth persisting across a restart.
  */
-export function FilesView({ root }: Props) {
+export function FilesView({ root, onChooseRoot }: Props) {
   const host = useHost();
   const [expanded, setExpanded] = useState<Record<string, FileEntry[]>>({});
   const [open, setOpen] = useState<string | null>(null);
@@ -83,9 +84,21 @@ export function FilesView({ root }: Props) {
   return (
     <div className="files">
       <nav className="files-tree">
-        <p className="files-root" title={root}>
-          {root}
-        </p>
+        <div className="files-head">
+          <p className="files-root" title={root}>
+            {root}
+          </p>
+          <button
+            className="ghost-button tiny"
+            onClick={() => {
+              void host.files.chooseDirectory().then((dir) => {
+                if (dir) onChooseRoot(dir);
+              });
+            }}
+          >
+            Open folder…
+          </button>
+        </div>
         <ul className="tree">{rows(root, 0)}</ul>
       </nav>
 

@@ -88,13 +88,26 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 home folder is the one to never grant wholesale.
               </span>
             </span>
-            <input
-              className="setting-input"
-              value={settings.defaultCwd}
-              spellCheck={false}
-              placeholder="~/git/atrium"
-              onChange={(event) => update({ defaultCwd: event.target.value })}
-            />
+            <span className="setting-pair">
+              <input
+                className="setting-input"
+                value={settings.defaultCwd}
+                spellCheck={false}
+                placeholder="~/git/atrium"
+                onChange={(event) => update({ defaultCwd: event.target.value })}
+              />
+              <button
+                type="button"
+                className="ghost-button tiny"
+                onClick={() => {
+                  void host.files.chooseDirectory().then((dir) => {
+                    if (dir) update({ defaultCwd: dir });
+                  });
+                }}
+              >
+                Choose…
+              </button>
+            </span>
           </label>
           {isHomeDirectory(settings.defaultCwd) && (
             <p className="setting-warning">

@@ -104,6 +104,10 @@ class ElectronFiles implements FileDriver {
   read(path: string) {
     return this.bridge.files.read(path);
   }
+
+  chooseDirectory() {
+    return this.bridge.files.choose();
+  }
 }
 
 export class ElectronHost implements Host {

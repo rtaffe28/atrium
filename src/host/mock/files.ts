@@ -39,4 +39,9 @@ export class MockFiles implements FileDriver {
   async read(path: string): Promise<FileContents> {
     return { text: FILES[path] ?? '', truncated: false };
   }
+
+  /** No native dialog in a browser tab; the tree has one root to offer. */
+  async chooseDirectory(): Promise<string | null> {
+    return '~';
+  }
 }

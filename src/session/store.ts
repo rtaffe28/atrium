@@ -375,17 +375,10 @@ export abstract class SessionStore implements SessionDriver {
     }));
   }
 
-  setTabUrl(sessionId: string, tabId: string, url: string): void {
+  patchTab(sessionId: string, tabId: string, patch: Partial<Tab>): void {
     this.update(sessionId, (session) => ({
       ...session,
-      tabs: {
-        ...session.tabs,
-        [tabId]: {
-          ...session.tabs[tabId],
-          url,
-          title: url.replace(/^https?:\/\//, '').split('/')[0] || 'New tab',
-        },
-      },
+      tabs: { ...session.tabs, [tabId]: { ...session.tabs[tabId], ...patch } },
     }));
   }
 

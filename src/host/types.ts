@@ -94,6 +94,14 @@ export interface FileContents {
 export interface FileDriver {
   list(path: string): Promise<FileEntry[]>;
   read(path: string): Promise<FileContents>;
+  /**
+   * Ask the user for a directory, natively.
+   *
+   * Resolves to null if they cancel. Typing a path into a text field is the
+   * worse half of this — it is the only way to reach a folder you cannot
+   * remember the spelling of.
+   */
+  chooseDirectory(): Promise<string | null>;
 }
 
 // ── notifications ──────────────────────────────────────────────────────────

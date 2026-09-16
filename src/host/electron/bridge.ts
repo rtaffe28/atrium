@@ -37,6 +37,7 @@ export interface AtriumBridge {
   files: {
     list(path: string): Promise<FileEntry[]>;
     read(path: string): Promise<FileContents>;
+    choose(): Promise<string | null>;
   };
   notify: { post(notice: { title: string; body: string; tag: string }): Promise<void> };
   workspace: {
