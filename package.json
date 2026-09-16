@@ -18,7 +18,8 @@
     "pty:clean": "node experiments/pty/hello-pty.mjs --clean",
     "dist": "npm run build && npm run electron:build && electron-builder --mac",
     "dist:dir": "npm run build && npm run electron:build && electron-builder --mac --dir",
-    "install:app": "node scripts/install.mjs"
+    "install:app": "node scripts/install.mjs",
+    "icon": "python3 build/make-icon.py && iconutil -c icns build/icon.iconset -o build/icon.icns"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
