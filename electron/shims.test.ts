@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { shimDirectory } from './shims';
+import { shellStartup, shimDirectory } from './shims';
 
 /**
  * The shims are shell scripts, so they are tested by running them against stub
@@ -106,5 +106,70 @@ describe('the codex shim', () => {
   it('stays out of the way of a subcommand', () => {
     armResume('thread-7', 'resume-codex');
     expect(run('codex', ['exec'])).toBe('codex exec');
+  });
+});
+
+/**
+ * The bug this covers: on Linux the default shell is bash, which got no
+ * integration at all. Atrium prefixes PATH before spawning, and Ubuntu's stock
+ * `.bashrc` then prepends `~/.local/bin` — where the agent is installed — so
+ * `claude` resolved to the real binary and the shim never ran once. Nothing
+ * said so. The tab simply came back on a new conversation after a restart.
+ */
+describe('bash shell integration', () => {
+  const startup = shellStartup('/bin/bash');
+  const initFile = startup.args[1];
+
+  /**
+   * The shell reports on the same stream it prints on, so its own OSC
+   * sequences come off before anything is asserted. Their presence is the
+   * integration working, not noise to be silenced.
+   */
+  // oxlint-disable-next-line no-control-regex -- the sequences are the point
+  const spoken = (out: string) => out.replace(/\u001b\][^\u0007]*\u0007/g, '').trim();
+
+  it('is installed with --init-file, since bash has no ZDOTDIR', () => {
+    expect(startup.args[0]).toBe('--init-file');
+    expect(initFile).toBeTruthy();
+    expect(startup.env.ATRIUM_SHIM_DIR).toBe(shims);
+  });
+
+  /** Runs a real bash against a hostile rc file and asks it what it resolved. */
+  function bashResolves(rc: string): string {
+    const home = mkdtempSync(join(tmpdir(), 'atrium-home-'));
+    writeFileSync(join(home, '.bashrc'), rc);
+    return execFileSync(
+      '/bin/bash',
+      ['--init-file', initFile, '-i', '-c', 'command -v claude'],
+      {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        env: {
+          HOME: home,
+          TERM: 'dumb',
+          PATH: `${shims}:${fakeBin}:/usr/bin:/bin`,
+          ATRIUM_SHIM_DIR: shims,
+        },
+      },
+    );
+  }
+
+  it('keeps the shims in front of an rc file that prepends its own directory', () => {
+    expect(spoken(bashResolves(`export PATH="${fakeBin}:$PATH"\n`))).toBe(join(shims, 'claude'));
+  });
+
+  it('still sources the user rc file it replaced', () => {
+    const home = mkdtempSync(join(tmpdir(), 'atrium-home-'));
+    writeFileSync(join(home, '.bashrc'), 'export ATRIUM_RC_RAN=yes\n');
+    const out = execFileSync(
+      '/bin/bash',
+      ['--init-file', initFile, '-i', '-c', 'echo "$ATRIUM_RC_RAN"'],
+      {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        env: { HOME: home, TERM: 'dumb', PATH: '/usr/bin:/bin', ATRIUM_SHIM_DIR: shims },
+      },
+    );
+    expect(spoken(out)).toBe('yes');
   });
 });

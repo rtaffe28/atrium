@@ -18,6 +18,21 @@ export interface RestoreInput {
 /** No output for this long after activity means the agent has stopped. */
 const SETTLE_MS = 1500;
 
+/**
+ * How long after a keystroke its echo may still be arriving.
+ *
+ * A pty echoes what is written to it, so typing produces output — and output
+ * is the basis for "the agent is working". Without this, typing into a tab
+ * made the agent look busy, and stopping typing rang the finished chime for
+ * work nobody had started.
+ *
+ * This is not a guess about what the output means: we sent those bytes, so we
+ * know. The only estimate is how long the round trip takes, and it only has to
+ * outlast one keystroke's echo — a continuing typist keeps pushing the window
+ * ahead of themselves.
+ */
+const ECHO_MS = 250;
+
 /** How often to ask the ptys what is running in them. */
 const POLL_MS = 2000;
 
@@ -58,6 +73,13 @@ interface Stream {
    * survive long enough to be useful.
    */
   awaitingHuman: boolean;
+  /**
+   * When the user last typed something that was not a submission.
+   *
+   * Editing a line is not the agent working, and the echo of it is not the
+   * agent's output. Submitting is a different matter, so it clears this.
+   */
+  typedAt: number;
 }
 
 /**
@@ -97,12 +119,18 @@ export class ElectronSessionDriver extends SessionStore {
   private shellName: string;
   private stateRoot = '';
 
-  constructor(bridge: AtriumBridge, home: string, shell: string, restore?: RestoreInput) {
+  constructor(
+    bridge: AtriumBridge,
+    home: string,
+    shell: string,
+    sessionState: string,
+    restore?: RestoreInput,
+  ) {
     super();
     this.bridge = bridge;
     this.home = home;
     this.shellName = shell.split('/').pop() ?? 'zsh';
-    this.stateRoot = `${home}/Library/Application Support/atrium/sessions`;
+    this.stateRoot = sessionState;
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
     this.bridge.pty.onExit((tabId) => {
       const stream = this.streams.get(tabId);
@@ -160,6 +188,27 @@ export class ElectronSessionDriver extends SessionStore {
         const running = foreground[tab.id];
         if (!running) continue;
 
+        // The shim writes down the conversation it opened, and this is how the
+        // tab learns which one it owns — including after the user exited one
+        // agent and started another.
+        //
+        // Deleted once as an uncalled method, which it was not. Without it a
+        // tab keeps the placeholder id it was born with, restore arms a resume
+        // for a conversation the agent has never heard of, and you get a new
+        // one instead of the one you left.
+        if (running !== this.shellName) {
+          void this.bridge.agent
+            .currentSession(tab.id)
+            .then((agentSessionId) => {
+              if (!agentSessionId || agentSessionId === tab.agentSessionId) return;
+              this.update(session.id, (s) => ({
+                ...s,
+                tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], agentSessionId } },
+              }));
+            })
+            .catch(() => {});
+        }
+
         if (running !== 'codex' || tab.codexSessionId) continue;
 
         // Codex writes its thread id only after it starts, so this is the
@@ -211,6 +260,7 @@ export class ElectronSessionDriver extends SessionStore {
         bell: newBellScan(),
         shell: newShellEventScan(),
         awaitingHuman: false,
+        typedAt: 0,
       };
       this.streams.set(tabId, stream);
     }
@@ -234,7 +284,7 @@ export class ElectronSessionDriver extends SessionStore {
     stream.buffer += data;
     for (const listener of stream.listeners) listener(data);
 
-    this.applyShellEvents(tabId, data, stream);
+    const reported = this.applyShellEvents(tabId, data, stream);
 
     if (!this.agents.has(tabId)) return;
 
@@ -249,6 +299,20 @@ export class ElectronSessionDriver extends SessionStore {
     // evidence that the agent stopped waiting. Only the human is.
     if (stream.awaitingHuman) return;
 
+    // Our own keystrokes coming back. Leaving the state and the settle clock
+    // alone is the point: typing should neither start the agent working nor
+    // postpone the moment it is reported as finished.
+    if (stream.typedAt && Date.now() - stream.typedAt < ECHO_MS) return;
+
+    // The same chunk carried the shell reporting how the command ended, and
+    // the chunk is also, unavoidably, output. Inferring "working" from it
+    // would overwrite a fact with a guess a line later, and the guess would
+    // then settle to "done" — so a failed command reported itself correctly
+    // and was announced as a success 1.5 seconds afterwards.
+    if (reported) return;
+
+    // Working and done are inferred from whether bytes are arriving, which is
+    // a weaker thing than it looks — see docs/plan/active/12-agent-state.md.
     this.setAgentState(tabId, 'working');
     window.clearTimeout(stream.settle);
     stream.settle = window.setTimeout(() => this.setAgentState(tabId, 'done'), SETTLE_MS);
@@ -262,9 +326,11 @@ export class ElectronSessionDriver extends SessionStore {
    * character. Both produced wrong answers in practice. A shell that speaks
    * the integration protocol simply says what it ran and how it ended.
    */
-  private applyShellEvents(tabId: string, data: string, stream: Stream) {
+  private applyShellEvents(tabId: string, data: string, stream: Stream): boolean {
     const session = this.sessionOfTab(tabId);
-    if (!session) return;
+    if (!session) return false;
+
+    let reported = false;
 
     for (const event of scanShellEvents(data, stream.shell)) {
       if (event.type === 'started' && event.command) {
@@ -289,13 +355,19 @@ export class ElectronSessionDriver extends SessionStore {
             : { ...s, tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], title: this.shellName } } },
         );
         if (event.type === 'finished' && this.agents.has(tabId)) {
+          // Reported by the shell, so this one is a fact: the command the tab
+          // was running has exited, with this status. It beats the settle
+          // clock, which is only ever a guess about the same thing.
           window.clearTimeout(stream.settle);
+          reported = true;
           if (!stream.awaitingHuman) {
             this.setAgentState(tabId, event.exitCode === 0 ? 'done' : 'error');
           }
         }
       }
     }
+
+    return reported;
   }
 
   private setAgentState(tabId: string, state: AgentState | undefined) {
@@ -381,12 +453,23 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   write(tabId: string, data: string): void {
-    // Typing is the answer the agent was waiting for.
-    const stream = this.streams.get(tabId);
-    if (stream?.awaitingHuman) {
-      stream.awaitingHuman = false;
-      this.setAgentState(tabId, 'working');
+    const stream = this.stream(tabId);
+
+    // Submitting is the answer the agent was waiting for. Typing towards one
+    // is not: a tab that flips to "working" on the first character claims the
+    // agent is busy with a line the user has not finished writing, and it
+    // stops saying "needs you" while that is still the only true thing about
+    // it.
+    if (/[\r\n]/.test(data)) {
+      stream.typedAt = 0;
+      if (stream.awaitingHuman) {
+        stream.awaitingHuman = false;
+        this.setAgentState(tabId, 'working');
+      }
+    } else {
+      stream.typedAt = Date.now();
     }
+
     // A real PTY echoes; unlike the mock we must not echo ourselves.
     this.bridge.pty.write(tabId, data);
   }

@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import BASHRC from './shell/bashrc.sh';
 import CLAUDE_SHIM from './shell/claude.sh';
 import CODEX_SHIM from './shell/codex.sh';
 import ZSHENV from './shell/zshenv.zsh';
@@ -102,12 +103,33 @@ function zshStartup(): string | null {
   }
 }
 
+let bashrcFile: string | null = null;
+
+/**
+ * bash has no ZDOTDIR, so integration goes in through `--init-file`, which
+ * replaces the interactive startup files rather than adding to them. The file
+ * sources them back itself — see the script.
+ */
+function bashStartup(): string | null {
+  if (bashrcFile) return bashrcFile;
+  try {
+    const file = join(makeDirectory('bash'), 'bashrc');
+    writeFileSync(file, BASHRC, 'utf8');
+    bashrcFile = file;
+    return file;
+  } catch {
+    return null;
+  }
+}
+
 /** Env and args that give a session our shell integration, if we can. */
 export function shellStartup(shellPath: string): ShellStartup {
   const shims = shimDirectory();
   if (!shims) return { env: {}, args: [] };
 
-  if ((shellPath.split('/').pop() ?? '') === 'zsh') {
+  const shell = shellPath.split('/').pop() ?? '';
+
+  if (shell === 'zsh') {
     const dir = zshStartup();
     if (dir) {
       return {
@@ -120,7 +142,14 @@ export function shellStartup(shellPath: string): ShellStartup {
       };
     }
   }
-  // Other shells keep the plain PATH prefix, which works wherever rc files
-  // leave PATH alone.
+
+  if (shell === 'bash') {
+    const file = bashStartup();
+    if (file) return { env: { ATRIUM_SHIM_DIR: shims }, args: ['--init-file', file] };
+  }
+
+  // Any other shell keeps the plain PATH prefix, which works only where rc
+  // files leave PATH alone. They frequently do not — a shell we cannot hook is
+  // a shell whose tabs will not bind to a conversation.
   return { env: {}, args: [] };
 }

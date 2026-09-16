@@ -6,6 +6,16 @@ export interface HostInfo {
   insets: { lead: number; trail: number };
   home: string;
   shell: string;
+  /**
+   * Where the shims report what each tab is running.
+   *
+   * Reported rather than reconstructed. The renderer used to build this path
+   * itself, from a macOS layout written as a string literal, while the main
+   * process used Electron's own `userData` — so on Linux the app armed a
+   * resume in one directory and told the shim to look in another. Two
+   * derivations of one path is one too many.
+   */
+  sessionState: string;
 }
 
 export interface AtriumBridge {

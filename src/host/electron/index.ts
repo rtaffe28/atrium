@@ -113,7 +113,7 @@ export class ElectronHost implements Host {
   readonly capabilities: Capabilities;
 
   constructor(bridge: AtriumBridge, info: HostInfo, restore?: RestoreInput) {
-    this.sessions = new ElectronSessionDriver(bridge, info.home, info.shell, restore);
+    this.sessions = new ElectronSessionDriver(bridge, info.home, info.shell, info.sessionState, restore);
     this.workspace = new FileWorkspace(bridge);
     this.files = new ElectronFiles(bridge);
     this.notify = new NativeNotify(bridge);

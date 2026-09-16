@@ -116,12 +116,17 @@ app.whenReady().then(async () => {
   ptys = new PtyManager(env, () => {});
 
   const insets = chromeInsets();
+
+  /** Where the shims report what each tab is running; the renderer is told. */
+  const sessionRoot = path.join(app.getPath('userData'), 'sessions');
+
   ipcMain.handle('host:info', () => ({
     platform:
       process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux',
     insets,
     home: env.HOME ?? env.USERPROFILE ?? '',
     shell: env.SHELL ?? process.env.COMSPEC ?? '',
+    sessionState: sessionRoot,
   }));
 
   ipcMain.handle('pty:spawn', (_e, options) => ptys.spawn(options));
@@ -154,8 +159,7 @@ app.whenReady().then(async () => {
     await rename(temporary, workspaceFile);
   });
 
-  const sessionState = (tabId: string) =>
-    path.join(app.getPath('userData'), 'sessions', tabId.replace(/[^\w-]/g, ''));
+  const sessionState = (tabId: string) => path.join(sessionRoot, tabId.replace(/[^\w-]/g, ''));
 
   /**
    * Arm a tab to resume, once.
