@@ -9,11 +9,14 @@
  *
  * Cheap to assert, so assert it.
  */
+const { execFileSync } = require('node:child_process');
 const { chmodSync, existsSync, statSync } = require('node:fs');
 const { join } = require('node:path');
 
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName === 'win32') return;
+
+  if (context.electronPlatformName === 'darwin') adhocSign(context);
 
   const resources =
     context.electronPlatformName === 'darwin'
@@ -39,3 +42,29 @@ exports.default = async function afterPack(context) {
   const mode = statSync(helper).mode & 0o777;
   console.log(`[after-pack] spawn-helper mode ${mode.toString(8)}`);
 };
+
+/**
+ * Ad-hoc sign the bundle when there is no Developer ID.
+ *
+ * Packing replaces resources inside an app that Electron already signed, which
+ * leaves the original signature describing files that are no longer there.
+ * `spctl` then reports "code has no resources but signature indicates they
+ * must be present" and Gatekeeper refuses it — the app still launches locally
+ * only because a locally built bundle is never quarantined.
+ *
+ * A real Developer ID replaces this entirely; electron-builder signs and this
+ * is skipped.
+ */
+function adhocSign(context) {
+  if (process.env.CSC_IDENTITY_AUTO_DISCOVERY !== 'false' && process.env.CSC_LINK) return;
+
+  const app = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  if (!existsSync(app)) return;
+
+  try {
+    execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'pipe' });
+    console.log('[after-pack] ad-hoc signed');
+  } catch (error) {
+    console.warn('[after-pack] ad-hoc signing failed:', error.message);
+  }
+}

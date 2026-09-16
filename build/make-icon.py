@@ -75,7 +75,7 @@ def _fit():
         xs.append(r * math.cos(th))
         ys.append(r * math.sin(th))
     x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-    scale = (1 - 2 * PAD) / max(x1 - x0, y1 - y0)
+    scale = (BODY - 2 * PAD * BODY) / max(x1 - x0, y1 - y0)
     return scale, 0.5 - (x0 + x1) / 2 * scale, 0.5 - (y0 + y1) / 2 * scale
 
 def lerp(a, b, t):
@@ -86,6 +86,28 @@ def age_colour(age):
     """Oldest chamber to newest, over however much of the ramp this size uses."""
     a = RAMP_FROM + (1 - RAMP_FROM) * age
     return lerp(OLD, MID, a / 0.62) if a < 0.62 else lerp(MID, NEW, (a - 0.62) / 0.38)
+
+# ── the macOS icon grid ──────────────────────────────────────────────────
+#
+# An app icon does not fill its canvas. Apple's grid puts the rounded body at
+# roughly 80% of the square with transparent margin around it, and every icon
+# in the Dock is drawn to that footprint — so one that runs edge to edge sits
+# visibly larger than its neighbours, which is exactly how this one looked.
+BODY = 0.805                 # body width as a fraction of the canvas
+BODY_RADIUS = 0.225          # corner radius as a fraction of the body
+SHADOW_DROP = 0.014          # how far the shadow sits below the body
+SHADOW_BLUR = 0.030
+SHADOW_ALPHA = 0.30
+
+def sd_round_rect(px, py, half, r):
+    """Signed distance to a rounded square centred on the origin."""
+    qx, qy = abs(px) - half + r, abs(py) - half + r
+    outside = math.hypot(max(qx, 0.0), max(qy, 0.0))
+    return outside + min(max(qx, qy), 0.0) - r
+
+def body_distance(nx, ny):
+    """Signed distance from the icon body, in canvas fractions."""
+    return sd_round_rect(nx - 0.5, ny - 0.5, BODY / 2, BODY * BODY_RADIUS)
 
 def rounded(x, y, x0, y0, x1, y1, r):
     if x < x0 or x > x1 or y < y0 or y > y1: return False
@@ -118,23 +140,37 @@ def render_png(path, S=1024, SS=3):
     for y in range(W):
         line = []
         for x in range(W):
-            if not rounded(x, y, 0, 0, W - 1, W - 1, W * 0.225):
-                line.append(None)
+            nx, ny = (x + 0.5) / W, (y + 0.5) / W
+            if body_distance(nx, ny) <= 0:
+                c = sample(nx, ny)
+                line.append(((c if c is not None else BG), 255))
             else:
-                c = sample(x / W, y / W)
-                line.append(c if c is not None else BG)
+                # Outside the body: a soft shadow, then nothing.
+                d = sd_round_rect(nx - 0.5, ny - 0.5 - SHADOW_DROP,
+                                  BODY / 2, BODY * BODY_RADIUS)
+                if d < SHADOW_BLUR:
+                    t = 1 - max(d, 0.0) / SHADOW_BLUR
+                    line.append(((0, 0, 0), round(255 * SHADOW_ALPHA * t * t)))
+                else:
+                    line.append(None)
         grid.append(line)
     for oy in range(S):
         row = bytearray([0])
         for ox in range(S):
-            r = g = b = cov = 0
+            r = g = b = a = 0
             for dy in range(SS):
                 line = grid[oy * SS + dy]
                 for dx in range(SS):
                     px = line[ox * SS + dx]
                     if px is None: continue
-                    r += px[0]; g += px[1]; b += px[2]; cov += 1
-            row += bytes((0,0,0,0)) if cov == 0 else bytes((r//cov, g//cov, b//cov, cov*255//n))
+                    (cr, cg, cb), ca = px
+                    # Premultiplied accumulation, so a soft shadow edge does
+                    # not drag the colour toward black.
+                    r += cr * ca; g += cg * ca; b += cb * ca; a += ca
+            if a == 0:
+                row += bytes((0, 0, 0, 0))
+            else:
+                row += bytes((r // a, g // a, b // a, a // n))
         rows.append(bytes(row))
     def chunk(tag, data):
         return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag+data) & 0xffffffff)
@@ -148,7 +184,9 @@ def render_png(path, S=1024, SS=3):
 def render_svg(path, U=32):
     hexc = lambda c: '#%02x%02x%02x' % c
     step = TAU / PER_TURN
-    parts = [f'<rect width="{U}" height="{U}" rx="{U*0.22:.2f}" fill="{hexc(BG)}"/>']
+    bw = BODY * U
+    parts = [f'<rect x="{(U-bw)/2:.2f}" y="{(U-bw)/2:.2f}" width="{bw:.2f}" '
+             f'height="{bw:.2f}" rx="{bw*BODY_RADIUS:.2f}" fill="{hexc(BG)}"/>']
     px = lambda x, y: ((x * SCALE + OFF_X) * U, (y * SCALE + OFF_Y) * U)
     total = int(TURNS * PER_TURN)
     for i in range(total):
