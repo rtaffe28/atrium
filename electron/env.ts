@@ -18,9 +18,45 @@ const run = promisify(execFile);
 const START = '__ATRIUM_ENV_START__';
 const END = '__ATRIUM_ENV_END__';
 
+/**
+ * Markers that say "this process is running inside an agent session".
+ *
+ * Atrium inherits whatever environment it was launched from, and a login-shell
+ * probe preserves it — so launching Atrium from inside a coding-agent session
+ * used to hand every terminal it opened that session's identity. Claude Code
+ * reads `CLAUDE_CODE_CHILD_SESSION`, concludes it is a nested invocation, and
+ * turns off transcript saving and trust persistence. The visible symptom is an
+ * agent that asks you to trust the same folder every single time and never
+ * saves a conversation.
+ *
+ * A terminal emulator must hand over a clean shell. Anything that identifies
+ * *our* launcher is not part of that.
+ *
+ * Note what is deliberately absent: ANTHROPIC_* and any other credential or
+ * preference a user set for themselves. Those belong to the shell.
+ */
+const AGENT_SESSION_MARKERS = [
+  'CLAUDECODE',
+  'CLAUDE_PID',
+  'CLAUDE_EFFORT',
+];
+const AGENT_SESSION_PREFIXES = ['CLAUDE_CODE_'];
+
+/** Drop the launcher's agent-session identity from an environment. */
+export function stripAgentSession(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const clean: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (AGENT_SESSION_MARKERS.includes(key)) continue;
+    if (AGENT_SESSION_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    clean[key] = value;
+  }
+  return clean;
+}
+
 export async function resolveLoginEnv(): Promise<NodeJS.ProcessEnv> {
-  // Windows inherits PATH from the registry correctly; nothing to do.
-  if (process.platform === 'win32') return { ...process.env };
+  // Windows inherits PATH from the registry correctly; nothing to do beyond
+  // the stripping every platform needs.
+  if (process.platform === 'win32') return stripAgentSession(process.env);
 
   const shell = process.env.SHELL ?? '/bin/zsh';
   try {
@@ -42,10 +78,12 @@ export async function resolveLoginEnv(): Promise<NodeJS.ProcessEnv> {
       const eq = line.indexOf('=');
       if (eq > 0) resolved[line.slice(0, eq)] = line.slice(eq + 1);
     }
-    return resolved;
+    // The probe inherits our environment before adding to it, so the markers
+    // survive the round trip and have to be removed after, not before.
+    return stripAgentSession(resolved);
   } catch {
     // An rc file that blocks on input will hit the timeout. Degrading to the
     // inherited environment beats refusing to start.
-    return { ...process.env };
+    return stripAgentSession(process.env);
   }
 }

@@ -83,6 +83,27 @@ it plus `cwd`, `TERM=xterm-256color`, `COLORTERM=truecolor`. Do **not** wrap
 each command in `$SHELL -lc` — it re-sources rc files per session and mangles
 argv.
 
+### Strip the launcher's identity before handing over a shell
+
+Atrium inherits whatever environment it was launched from, and the login-shell
+probe *preserves* it — the probe inherits our environment before adding to it,
+so anything already there survives the round trip.
+
+That leaked badly. Launching Atrium from inside a coding-agent session handed
+every terminal it opened that session's identity. Claude Code reads
+`CLAUDE_CODE_CHILD_SESSION`, concludes it is a nested invocation, and turns off
+transcript saving and trust persistence — so it asked to trust the same folder
+on every single launch and never saved a conversation. Nine variables were
+being passed through.
+
+`stripAgentSession` in `electron/env.ts` removes them. The rule is narrow on
+purpose: markers that identify *our launcher*, never credentials or
+preferences. `ANTHROPIC_API_KEY` belongs to the shell and stays.
+
+Generalise the lesson rather than the list: a terminal emulator hands over a
+clean shell. Anything in the environment that describes the emulator's own
+parentage is not part of that.
+
 ## Open question O1: who owns the PTYs
 
 Deferred, but the shape of the answer is known.
