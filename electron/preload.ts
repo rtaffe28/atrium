@@ -62,12 +62,10 @@ const bridge = {
       resume: { claude?: string; codex?: string },
       cwd?: string,
     ): Promise<string> => ipcRenderer.invoke('agent:prepare-session', tabId, resume, cwd),
-    currentSession: (tabId: string): Promise<string | null> =>
-      ipcRenderer.invoke('agent:current-session', tabId),
+    report: (tabId: string): Promise<{ sessionId: string | null; status: string | null }> =>
+      ipcRenderer.invoke('agent:report', tabId),
     newestCodexSession: (since: number): Promise<string | null> =>
       ipcRenderer.invoke('agent:newest-codex-session', since),
-    newestClaudeSession: (cwd: string, since: number): Promise<string | null> =>
-      ipcRenderer.invoke('agent:newest-claude-session', cwd, since),
   },
 
   files: {

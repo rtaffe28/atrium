@@ -43,6 +43,25 @@ for arg in "$@"; do
   prev="$arg"
 done
 
+# Lifecycle hooks, so the tab hears about its agent from the agent. Added to
+# every invocation including the pass-through ones below, because reporting is
+# not a thing Atrium started the agent for — it is how a tab knows anything at
+# all. Skipped when the user brings their own --settings: theirs would replace
+# ours, and a flag that quietly stops working is worse than one that reports
+# nothing.
+settings="$self_dir/claude-settings.json"
+[ -f "$settings" ] || settings=""
+if [ -n "$settings" ]; then
+  for arg in "$@"; do
+    case "$arg" in
+      --settings|--settings=*) settings="" ;;
+    esac
+  done
+fi
+if [ -n "$settings" ]; then
+  set -- --settings "$settings" "$@"
+fi
+
 for arg in "$@"; do
   case "$arg" in
     --session-id|--resume|-r|--continue|-c) exec "$real" "$@" ;;

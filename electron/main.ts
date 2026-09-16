@@ -207,34 +207,19 @@ app.whenReady().then(async () => {
     },
   );
 
-  /** Which conversation the tab is actually on, as reported by the shim. */
-  ipcMain.handle('agent:current-session', async (_e, tabId: string) => {
-    const file = path.join(sessionState(tabId), 'current');
-    return (await readFile(file, 'utf8').catch(() => '')).trim() || null;
-  });
-
   /**
-   * Which conversation Claude is writing to in this directory.
+   * What the tab's agent has said about itself.
    *
-   * The shim records the id it hands out, and an explicit `--resume <id>`.
-   * It cannot see the other two ways to change conversation: `claude --resume`
-   * with no id opens a picker, and `/resume` switches inside a process that
-   * has already started. Claude's own transcripts do show it — the live
-   * conversation is the file being appended to.
+   * `current` is written by the shim when it hands out an id, and by Claude's
+   * SessionStart hook for every other way a conversation can begin. `status`
+   * is written only by the hooks — an agent that reports is an agent whose
+   * state is a fact rather than a guess about output timing.
    */
-  ipcMain.handle('agent:newest-claude-session', async (_e, cwd: string, since: number) => {
-    const dir = claudeProjects(cwd);
-    const uuid = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
-    let best: { id: string; at: number } | null = null;
-
-    for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-      const match = uuid.exec(entry.name);
-      if (!match || !entry.isFile()) continue;
-      const info = await stat(path.join(dir, entry.name)).catch(() => null);
-      if (!info || info.mtimeMs < since) continue;
-      if (!best || info.mtimeMs > best.at) best = { id: match[1], at: info.mtimeMs };
-    }
-    return best?.id ?? null;
+  ipcMain.handle('agent:report', async (_e, tabId: string) => {
+    const dir = sessionState(tabId);
+    const read = async (name: string) =>
+      (await readFile(path.join(dir, name), 'utf8').catch(() => '')).trim() || null;
+    return { sessionId: await read('current'), status: await read('status') };
   });
 
   ipcMain.handle('agent:newest-codex-session', async (_e, since: number) => {

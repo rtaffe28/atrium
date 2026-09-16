@@ -5,7 +5,10 @@ import type { AtriumBridge } from './bridge';
 /** A bridge that records calls and lets a test decide what is running. */
 function fakeBridge() {
   let foreground: Record<string, string> = {};
-  let liveClaudeSession: string | null = null;
+  let report: { sessionId: string | null; status: string | null } = {
+    sessionId: null,
+    status: null,
+  };
   const spawned: Array<{ id: string; cwd: string }> = [];
   const written: Array<{ id: string; data: string }> = [];
   let onData: ((id: string, data: string) => void) | null = null;
@@ -31,9 +34,8 @@ function fakeBridge() {
     },
     agent: {
       prepareSession: vi.fn(async () => '/tmp/state'),
-      currentSession: vi.fn(async () => null),
+      report: vi.fn(async () => report),
       newestCodexSession: vi.fn(async () => null),
-      newestClaudeSession: vi.fn(async () => liveClaudeSession),
     },
     notify: { post: vi.fn() },
     workspace: { load: vi.fn(), save: vi.fn() },
@@ -48,8 +50,8 @@ function fakeBridge() {
     setForeground: (f: Record<string, string>) => {
       foreground = f;
     },
-    setLiveClaudeSession: (id: string | null) => {
-      liveClaudeSession = id;
+    setReport: (next: { sessionId?: string; status?: string }) => {
+      report = { sessionId: null, status: null, ...next };
     },
   };
 }
@@ -154,43 +156,21 @@ describe('what a tab is running, as reported by the shell', () => {
   /**
    * `claude --resume` with no id opens a picker, and `/resume` switches inside
    * a running process. Neither reaches the shim, so a tab that only trusted
-   * the shim kept arming the conversation you had left behind.
+   * the shim kept arming the conversation you had left behind. The agent's own
+   * SessionStart hook fires for all of them.
    */
   it('follows the user into a conversation they resumed themselves', async () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
     const { tabId } = firstTerminalTab(driver);
 
-    f.emit(tabId, osc('633;E;claude --resume'));
     f.setForeground({ [tabId]: '2.1.273' });
-    f.setLiveClaudeSession('62501422-cc78-44a5-87cb-00f03cf9df28');
+    f.setReport({ sessionId: '62501422-cc78-44a5-87cb-00f03cf9df28' });
     await driver.refreshCommands();
 
     expect(driver.list()[0].tabs[tabId].agentSessionId).toBe(
       '62501422-cc78-44a5-87cb-00f03cf9df28',
     );
-    driver.dispose();
-  });
-
-  /** Two tabs in one directory; the transcripts cannot say which is which. */
-  it('does not take a conversation another tab already holds', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
-    const session = driver.list()[0];
-    const held = Object.keys(session.tabs)[0];
-    const groupId = Object.keys(session.groups)[0];
-    const other = driver.addTab(session.id, groupId, 'terminal').id;
-
-    for (const tabId of [held, other]) f.emit(tabId, osc('633;E;claude'));
-    f.setForeground({ [held]: '2.1.273', [other]: '2.1.273' });
-
-    f.setLiveClaudeSession('62501422-cc78-44a5-87cb-00f03cf9df28');
-    await driver.refreshCommands();
-    const claimed = driver.list()[0].tabs[held].agentSessionId;
-    expect(claimed, 'the first tab to see it binds to it').toBe(
-      '62501422-cc78-44a5-87cb-00f03cf9df28',
-    );
-    expect(driver.list()[0].tabs[other].agentSessionId).not.toBe(claimed);
     driver.dispose();
   });
 
@@ -339,6 +319,30 @@ describe('typing is not the agent working', () => {
     const state = () => driver.list()[0].tabs.t1.agentState;
     return { f, driver, state };
   }
+
+  /**
+   * The rail flickered between "working" and "needs you" because output kept
+   * arriving after the agent had asked its question — a spinner redrawing is
+   * output, and output was the evidence of work. No refinement of which bytes
+   * count fixes that; the presence of output simply does not carry the
+   * information. So once the agent has said what it is doing, nothing else in
+   * this class gets a vote on the matter.
+   */
+  it('stops guessing once the agent reports for itself', async () => {
+    vi.useFakeTimers();
+    const { f, driver, state } = agentTab();
+
+    f.setForeground({ t1: '2.1.273' });
+    f.setReport({ sessionId: 'abc', status: 'waiting' });
+    await driver.refreshCommands();
+    expect(state()).toBe('waiting');
+
+    // The agent explaining what it wants, while it waits for the answer.
+    f.emit('t1', 'Do you want me to edit this file?\r\n');
+    vi.advanceTimersByTime(5000);
+    expect(state(), 'output is not a second opinion').toBe('waiting');
+    driver.dispose();
+  });
 
   it('stays quiet while a keystroke echoes back', () => {
     vi.useFakeTimers();

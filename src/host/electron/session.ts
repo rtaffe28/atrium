@@ -19,6 +19,18 @@ export interface RestoreInput {
 const SETTLE_MS = 1500;
 
 /**
+ * What the hooks write, and what it means to the rail.
+ *
+ * `clear` removes the file rather than writing a state: a tab whose agent has
+ * exited is not in any of these, it simply has no agent.
+ */
+const REPORTED_STATES: Record<string, AgentState | undefined> = {
+  working: 'working',
+  done: 'done',
+  waiting: 'waiting',
+};
+
+/**
  * How long after a keystroke its echo may still be arriving.
  *
  * A pty echoes what is written to it, so typing produces output — and output
@@ -107,6 +119,8 @@ interface Stream {
 export class ElectronSessionDriver extends SessionStore {
   private streams = new Map<string, Stream>();
   private agents = new Set<string>();
+  /** Tabs whose agent reports its own state, and so is never guessed at. */
+  private reporting = new Set<string>();
   /** Commands waiting to be typed into a freshly spawned shell. */
   private autorun = new Map<string, { command: string; timer: number }>();
   /** When each tab's shell started, so a Codex thread can be matched to it. */
@@ -188,35 +202,22 @@ export class ElectronSessionDriver extends SessionStore {
         const running = foreground[tab.id];
         if (!running) continue;
 
-        // The shim writes down the conversation it opened, and this is how the
-        // tab learns which one it owns — including after the user exited one
-        // agent and started another.
-        //
-        // Deleted once as an uncalled method, which it was not. Without it a
-        // tab keeps the placeholder id it was born with, restore arms a resume
-        // for a conversation the agent has never heard of, and you get a new
-        // one instead of the one you left.
-        if (running !== this.shellName) {
-          void this.bridge.agent
-            .currentSession(tab.id)
-            .then((agentSessionId) => {
-              if (!agentSessionId || agentSessionId === tab.agentSessionId) return;
-              this.update(session.id, (s) => ({
-                ...s,
-                tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], agentSessionId } },
-              }));
-            })
-            .catch(() => {});
+        // Back at a prompt: whatever was reporting has gone, and the next
+        // thing to run here may be something that cannot.
+        if (running === this.shellName) {
+          this.reporting.delete(tab.id);
+          continue;
         }
 
-        // Claude renames its own process, so what it is cannot be read off the
-        // foreground; what the tab was told to run is the reliable answer.
-        if ((tab.command ?? tab.agent ?? '').trim().split(/\s+/)[0] === 'claude') {
-          void this.bridge.agent
-            .newestClaudeSession(tab.cwd ?? session.cwd, this.spawnedAt.get(tab.id) ?? 0)
-            .then((agentSessionId) => this.adoptConversation(tab.id, agentSessionId))
-            .catch(() => {});
-        }
+        // What the agent has said about itself — which conversation it is on,
+        // and what it is doing. Without it a tab keeps the placeholder id it
+        // was born with, restore arms a resume for a conversation the agent
+        // has never heard of, and you get a new one instead of the one you
+        // left.
+        void this.bridge.agent
+          .report(tab.id)
+          .then((report) => this.applyReport(tab.id, report))
+          .catch(() => {});
 
         if (running !== 'codex' || tab.codexSessionId) continue;
 
@@ -296,6 +297,10 @@ export class ElectronSessionDriver extends SessionStore {
     const reported = this.applyShellEvents(tabId, data, stream);
 
     if (!this.agents.has(tabId)) return;
+
+    // This tab's agent says what it is doing. Nothing below this line is
+    // better than that, and everything below it can contradict it.
+    if (this.reporting.has(tabId)) return;
 
     if (scanForBell(data, stream.bell)) {
       stream.awaitingHuman = true;
@@ -392,28 +397,32 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   /**
-   * Bind a tab to the conversation Claude is actually writing to.
+   * Take the agent at its word.
    *
-   * Two tabs can be running in one directory, and the transcripts alone cannot
-   * say which is which — so a conversation another tab already holds is left
-   * alone. That tab claimed it while it was the one being written to, which is
-   * the better evidence of the two.
+   * A reported status is not a better guess than the settle clock — it is a
+   * different kind of thing. Once a tab has produced one, the inference stops
+   * for that tab entirely: two answers to one question is how the rail came to
+   * flicker between "working" and "needs you" in the first place.
    */
-  private adoptConversation(tabId: string, agentSessionId: string | null): void {
-    if (!agentSessionId) return;
+  private applyReport(
+    tabId: string,
+    { sessionId, status }: { sessionId: string | null; status: string | null },
+  ): void {
     const session = this.sessionOfTab(tabId);
-    if (!session || session.tabs[tabId]?.agentSessionId === agentSessionId) return;
+    if (!session) return;
 
-    for (const other of this.list()) {
-      for (const tab of Object.values(other.tabs)) {
-        if (tab.id !== tabId && tab.agentSessionId === agentSessionId) return;
-      }
+    if (sessionId && session.tabs[tabId]?.agentSessionId !== sessionId) {
+      this.update(session.id, (s) => ({
+        ...s,
+        tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentSessionId: sessionId } },
+      }));
     }
 
-    this.update(session.id, (s) => ({
-      ...s,
-      tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentSessionId } },
-    }));
+    const reported = REPORTED_STATES[status ?? ''];
+    if (!reported) return;
+    this.reporting.add(tabId);
+    window.clearTimeout(this.stream(tabId).settle);
+    this.setAgentState(tabId, reported);
   }
 
   private setAgentState(tabId: string, state: AgentState | undefined) {
@@ -471,6 +480,7 @@ export class ElectronSessionDriver extends SessionStore {
     if (queued) window.clearTimeout(queued.timer);
     this.streams.delete(tabId);
     this.agents.delete(tabId);
+    this.reporting.delete(tabId);
     this.autorun.delete(tabId);
     this.spawnedAt.delete(tabId);
     this.bridge.pty.kill(tabId);
