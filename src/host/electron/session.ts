@@ -150,7 +150,15 @@ export class ElectronSessionDriver extends SessionStore {
 
         const idle = running === this.shellName;
         const line = this.submitted.get(tab.id) ?? '';
-        const command = idle ? undefined : line || plausibleCommand(running);
+
+        // `command` is what the tab was last *doing*, not what it is doing this
+        // second. Clearing it when a process exits threw away the one thing
+        // restore needs: exit an agent, quit, and the tab came back as a bare
+        // shell even though it still knew which conversation it owned.
+        const command = idle ? tab.command : line || plausibleCommand(running);
+
+        // The title does track the live state, so a finished tab stops
+        // claiming something is running in it.
         const title = idle
           ? this.shellName
           : (command?.split(/\s+/)[0] ?? plausibleCommand(running) ?? running);

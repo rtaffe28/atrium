@@ -129,7 +129,7 @@ describe('capturing what is running in a tab', () => {
     driver.dispose();
   });
 
-  it('records nothing while the tab is just sitting at a shell prompt', async () => {
+  it('records nothing for a tab that has only ever sat at a prompt', async () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
     const { tabId } = firstTerminalTab(driver);
@@ -139,6 +139,31 @@ describe('capturing what is running in a tab', () => {
 
     await driver.refreshCommands();
     expect(driver.list()[0].tabs[tabId].command).toBeUndefined();
+    driver.dispose();
+  });
+
+  /**
+   * The tab has to remember what it was doing, not only what it is doing.
+   * Exiting an agent and then quitting used to leave a bare shell on restore,
+   * throwing away a conversation the tab still had the id for.
+   */
+  it('keeps the last command after the agent exits', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
+    const { tabId } = firstTerminalTab(driver);
+
+    driver.write(tabId, 'claude\r');
+    f.setForeground({ [tabId]: 'claude' });
+    await driver.refreshCommands();
+    expect(driver.list()[0].tabs[tabId].command).toBe('claude');
+
+    // The agent exits; the shell is idle again.
+    f.setForeground({ [tabId]: 'zsh' });
+    await driver.refreshCommands();
+
+    const tab = driver.list()[0].tabs[tabId];
+    expect(tab.command, 'restore needs this').toBe('claude');
+    expect(tab.title, 'but the tab should stop claiming it is running').toBe('zsh');
     driver.dispose();
   });
 

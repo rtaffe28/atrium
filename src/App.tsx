@@ -92,9 +92,14 @@ function Workspace() {
   );
 
   const createSession = useCallback(() => {
+    // Inherit the directory you are already working in. Agents ask permission
+    // per directory, and the home folder is the one nobody should grant
+    // wholesale — so a new session should land in the project you are in, not
+    // back at ~.
+    const inherited = sessions.find((s) => s.id === activeId)?.cwd;
     const created = driver.createSession({
       title: settings.defaultCommand.trim() || 'Shell',
-      cwd: settings.defaultCwd.trim() || '~',
+      cwd: inherited ?? settings.defaultCwd.trim() ?? '~',
       branch: 'main',
       command: settings.defaultCommand,
     });
@@ -104,7 +109,7 @@ function Workspace() {
     // opened it.
     const firstTab = Object.keys(created.tabs)[0];
     if (firstTab) setFocusRequest(requestFocus(firstTab));
-  }, [driver, settings.defaultCommand, settings.defaultCwd]);
+  }, [driver, settings.defaultCommand, settings.defaultCwd, sessions, activeId]);
 
   /** Entering an existing session should also put the cursor in its terminal. */
   const selectSession = useCallback(

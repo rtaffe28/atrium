@@ -74,9 +74,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <span className="setting-text">
               <span className="setting-label">Working directory</span>
               <span className="setting-hint">
-                Where new sessions open. A project directory rather than your
-                home folder: an agent asks permission per directory, and
-                resumes the conversation belonging to it.
+                Where the first session opens; after that, new ones inherit the
+                directory you are in. Point it at a project rather than your
+                home folder — an agent asks permission per directory, and your
+                home folder is the one to never grant wholesale.
               </span>
             </span>
             <input
