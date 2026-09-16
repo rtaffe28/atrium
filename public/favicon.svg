@@ -1,16 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#e8f1ff"/>
-      <stop offset="1" stop-color="#7aa2f7"/>
+    <clipPath id="heart">
+      <!-- Two lobes over a tapering body: an anatomical heart, not a valentine. -->
+      <path d="M5.6 9.8a5.2 5.2 0 0 1 10.4 0 5.2 5.2 0 0 1 10.4 0
+               c0 7-5.4 12.6-10.4 17.2C11 22.4 5.6 16.8 5.6 9.8Z"/>
+    </clipPath>
+    <linearGradient id="al" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dceaff"/><stop offset="1" stop-color="#74a0f7"/>
+    </linearGradient>
+    <linearGradient id="ar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d4f4ff"/><stop offset="1" stop-color="#62c2f0"/>
+    </linearGradient>
+    <linearGradient id="vl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#53627a"/><stop offset="1" stop-color="#2e3847"/>
+    </linearGradient>
+    <linearGradient id="vr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#455368"/><stop offset="1" stop-color="#262f3c"/>
     </linearGradient>
   </defs>
+
   <rect width="32" height="32" rx="7" fill="#0b0d10"/>
-  <!-- The compluvium: four roof planes sloping in toward the opening, lit
-       from the upper left. -->
-  <polygon points="5,5 27,5 21,11 11,11" fill="#49535f"/>
-  <polygon points="5,5 11,11 11,21 5,27" fill="#6a7789"/>
-  <polygon points="27,5 27,27 21,21 21,11" fill="#333b47"/>
-  <polygon points="5,27 11,21 21,21 27,27" fill="#232932"/>
-  <rect x="11" y="11" width="10" height="10" fill="url(#sky)"/>
+  <!-- The four chambers. The gaps between them are the septum, drawn as
+       absence rather than as a line. Atria lit; ventricles in shadow. -->
+  <g clip-path="url(#heart)">
+    <rect x="0"     y="0"    width="15.2" height="13.8" fill="url(#al)"/>
+    <rect x="16.8"  y="0"    width="15.2" height="13.8" fill="url(#ar)"/>
+    <rect x="0"     y="15.4" width="15.2" height="17"   fill="url(#vl)"/>
+    <rect x="16.8"  y="15.4" width="15.2" height="17"   fill="url(#vr)"/>
+  </g>
 </svg>
