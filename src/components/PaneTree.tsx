@@ -1,3 +1,4 @@
+import type { FocusRequest } from '../focusRequest';
 import { useRef } from 'react';
 import type { LayoutNode, Session, SessionDriver } from '../session/types';
 import { PaneView } from './PaneView';
@@ -5,14 +6,14 @@ import { PaneView } from './PaneView';
 interface Props {
   node: LayoutNode;
   onFocus: (groupId: string) => void;
-  focusTabId?: string | null;
+  focusRequest?: FocusRequest | null;
   /** Child-index path from the layout root, so setSizes can find this split. */
   path: number[];
   session: Session;
   driver: SessionDriver;
 }
 
-export function PaneTree({ node, path, session, driver, onFocus, focusTabId }: Props) {
+export function PaneTree({ node, path, session, driver, onFocus, focusRequest }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (node.type === 'leaf') {
@@ -22,7 +23,7 @@ export function PaneTree({ node, path, session, driver, onFocus, focusTabId }: P
         groupId={node.groupId}
         driver={driver}
         onFocus={onFocus}
-        focusTabId={focusTabId}
+        focusRequest={focusRequest}
       />
     );
   }
@@ -64,7 +65,7 @@ export function PaneTree({ node, path, session, driver, onFocus, focusTabId }: P
           session={session}
           driver={driver}
           onFocus={onFocus}
-          focusTabId={focusTabId}
+          focusRequest={focusRequest}
         />
       </div>
       <div
@@ -80,7 +81,7 @@ export function PaneTree({ node, path, session, driver, onFocus, focusTabId }: P
           session={session}
           driver={driver}
           onFocus={onFocus}
-          focusTabId={focusTabId}
+          focusRequest={focusRequest}
         />
       </div>
     </div>

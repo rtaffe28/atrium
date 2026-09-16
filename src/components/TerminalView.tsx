@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
+import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useSettings } from '../settings/context';
 import type { SessionDriver } from '../session/types';
 
@@ -34,13 +35,12 @@ interface Props {
   tabId: string;
   driver: SessionDriver;
   /**
-   * When this matches our tab, take keyboard focus.
+   * A one-shot request to take keyboard focus.
    *
-   * Only ever set by an action that created or entered this tab. Focusing
-   * whenever a terminal mounts would steal the cursor on every split and on
-   * every restore, which is worse than the problem it solves.
+   * Claiming it marks it spent, so a later remount — a split, a tab move —
+   * cannot honour it again and jump the cursor.
    */
-  focusTabId?: string | null;
+  focusRequest?: FocusRequest | null;
 }
 
 /**
@@ -50,7 +50,7 @@ interface Props {
  * split, a tab move, or a session switch exercises exactly the path a real
  * driver uses to recover from a dropped connection.
  */
-export function TerminalView({ tabId, driver, focusTabId }: Props) {
+export function TerminalView({ tabId, driver, focusRequest }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const { settings } = useSettings();
@@ -125,8 +125,8 @@ export function TerminalView({ tabId, driver, focusTabId }: Props) {
   }, [tabId, driver, fontSize]);
 
   useEffect(() => {
-    if (focusTabId === tabId) termRef.current?.focus();
-  }, [focusTabId, tabId]);
+    if (claimFocus(focusRequest ?? null, tabId)) termRef.current?.focus();
+  }, [focusRequest, tabId]);
 
   return <div className="terminal-host" ref={hostRef} />;
 }

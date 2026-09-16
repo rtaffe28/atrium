@@ -12,6 +12,7 @@ import { PaneTree } from './components/PaneTree';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
+import { requestFocus, type FocusRequest } from './focusRequest';
 import type { DropAction, Session } from './session/types';
 
 export default function App({ host }: { host?: Host }) {
@@ -42,45 +43,36 @@ function Workspace() {
    * Set only by entering or creating something — never on mount or restore, or
    * the cursor would be yanked around on every split and every launch.
    */
-  const [focusTabId, setFocusTabId] = useState<string | null>(null);
-
-  useEffect(() => driver.subscribe(setSessions), [driver]);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
 
   /**
    * Put the cursor in the terminal when the app opens.
    *
-   * Once, on the first workspace to arrive — not on every mount, which would
-   * yank focus on every split and every re-render.
+   * Handled here, in the subscription itself, rather than in an effect
+   * watching `sessions` — the arrival of the first workspace is the event, and
+   * reacting to it directly avoids a render pass that exists only to notice it
+   * happened. Once only: focusing on every workspace update would jump the
+   * cursor whenever anything changed.
    */
   const openedRef = useRef(false);
-  useEffect(() => {
-    if (openedRef.current || sessions.length === 0) return;
-    openedRef.current = true;
-    const first = sessions[0];
-    const group = first.groups[Object.keys(first.groups)[0]];
-    setActiveGroupId(group?.id ?? null);
-    setFocusTabId(group?.activeTabId ?? null);
-  }, [sessions]);
+  useEffect(
+    () =>
+      driver.subscribe((next) => {
+        setSessions(next);
+        if (openedRef.current || next.length === 0) return;
+        openedRef.current = true;
+        const first = next[0];
+        const group = first.groups[Object.keys(first.groups)[0]];
+        setActiveGroupId(group?.id ?? null);
+        if (group?.activeTabId) setFocusRequest(requestFocus(group.activeTabId));
+      }),
+    [driver],
+  );
 
   useAgentNotifications(sessions);
 
   // activeId is only a preference. Resolving it during render means a killed
   // session falls back to the next one without an effect round-trip.
-  /**
-   * A focus request is consumed once and then cleared.
-   *
-   * React runs child effects before parent ones, so the terminal has already
-   * taken focus by the time this fires. Leaving the request set instead would
-   * mean any later remount — a split, a tab move — silently honours it again
-   * and the cursor jumps.
-   */
-  // eslint-disable-next-line react/set-state-in-effect -- the effect IS the
-  // mechanism: this consumes a one-shot signal after the children that act on
-  // it have run, which is precisely what an effect is for.
-  useEffect(() => {
-    if (focusTabId) setFocusTabId(null);
-  }, [focusTabId]);
-
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0] ?? null;
 
   // Where a new tab lands: the pane you last touched, falling back to the
@@ -94,7 +86,7 @@ function Workspace() {
     (kind: 'terminal' | 'browser') => {
       if (!active || !targetGroupId) return;
       const created = driver.addTab(active.id, targetGroupId, kind);
-      setFocusTabId(created.id);
+      setFocusRequest(requestFocus(created.id));
     },
     [driver, active, targetGroupId],
   );
@@ -110,7 +102,8 @@ function Workspace() {
     setActiveGroupId(Object.keys(created.groups)[0] ?? null);
     // Land in the new terminal ready to type, rather than on the button that
     // opened it.
-    setFocusTabId(Object.keys(created.tabs)[0] ?? null);
+    const firstTab = Object.keys(created.tabs)[0];
+    if (firstTab) setFocusRequest(requestFocus(firstTab));
   }, [driver, settings.defaultCommand, settings.defaultCwd]);
 
   /** Entering an existing session should also put the cursor in its terminal. */
@@ -121,7 +114,7 @@ function Workspace() {
       if (!session) return;
       const group = session.groups[Object.keys(session.groups)[0]];
       setActiveGroupId(group?.id ?? null);
-      setFocusTabId(group?.activeTabId ?? null);
+      if (group?.activeTabId) setFocusRequest(requestFocus(group.activeTabId));
     },
     [sessions],
   );
@@ -193,7 +186,7 @@ function Workspace() {
                 session={active}
                 driver={driver}
                 onFocus={setActiveGroupId}
-                focusTabId={focusTabId}
+                focusRequest={focusRequest}
               />
             ) : (
               <div className="empty">
