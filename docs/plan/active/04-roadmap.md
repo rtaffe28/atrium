@@ -13,13 +13,13 @@ Shipped: session rail with derived state, split panes as a binary tree,
 tabs (terminal and browser) that drag to reorder, to split, or onto the rail
 to become their own session, resizable splitters, Escape-to-interrupt,
 `×`-to-kill, and system notifications with synthesised sounds. See
-`05-ui-model.md`.
+`../completed/05-ui-model.md`.
 
 ### ✅ Stage 1.5 — define the host interface
 
 `Host` replaces the session-only seam: sessions, surfaces, git, files, notify,
 window, behind one injected object with a capability matrix. `MockHost` runs in
-a browser tab and stays a supported target. See `06-host-interface.md`.
+a browser tab and stays a supported target. See `../completed/06-host-interface.md`.
 
 ### ✅ Stage 2 — see a real PTY, outside this project
 
@@ -38,7 +38,7 @@ moved in.
 **Carry this one forward:** node-pty's prebuilt `spawn-helper` arrives without
 its execute bit, because npm's tarball extraction drops it, and every spawn
 then fails with a bare `posix_spawnp failed` that looks like a code bug. The
-tell is that `/bin/echo` fails identically. `scripts/fix-spawn-helper.mjs`
+tell is that `/bin/echo` fails identically. `scripts/native-permissions.mjs`
 fixes it on postinstall. Expect the same class of problem when packaging —
 native helpers have to keep their permissions through asar packing and code
 signing.
@@ -78,7 +78,7 @@ silent, suspect the dev server before the app.
 
 A settings panel (⌘,) covering the default command for new sessions, alert
 sounds (off by default), which states notify, and terminal font size. The
-workspace persists and restores across restarts — see `07-persistence.md`,
+workspace persists and restores across restarts — see `../completed/07-persistence.md`,
 including what restore cannot do.
 
 ### Stage 7 — worktrees

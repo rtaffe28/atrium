@@ -131,7 +131,7 @@ export interface WindowDriver {
  * a child of the app, so quitting ends it. What survives is the *shape* of the
  * workspace plus each terminal's scrollback, and on restore the commands are
  * run again. Making the processes themselves outlive the app needs a detached
- * daemon — see open question O1 in docs/plan/03-architecture.md.
+ * daemon — see open question O1 in docs/plan/active/03-architecture.md.
  */
 export interface PersistedWorkspace {
   version: 1;

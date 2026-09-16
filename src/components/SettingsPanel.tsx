@@ -212,7 +212,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             </div>
           ))}
           <p className="setting-hint">
-            Fixed for now. Rebinding is designed in docs/plan/10-keyboard.md;
+            Fixed for now. Rebinding is designed in docs/plan/active/10-keyboard.md;
             this list is generated from the same table the app binds, so it
             cannot fall out of step with what the keys actually do.
           </p>

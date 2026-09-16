@@ -150,7 +150,7 @@ Restored tabs have their agent state cleared rather than inherited. Showing
 kind of lie that costs someone twenty minutes.
 
 **Keeping the process itself alive** needs the detached daemon from open
-question O1 in `03-architecture.md` — a long-lived process that owns the PTYs,
+question O1 in `../active/03-architecture.md` — a long-lived process that owns the PTYs,
 which the GUI attaches to and detaches from. That is the real fix, it is what
 tmux does, and it is the reason O1 was worth writing down before any of this
 existed.

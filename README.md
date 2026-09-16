@@ -15,9 +15,13 @@ npm run electron  # the real app: real PTYs, needs `npm run dev` running
 npm test          # 51 tests
 npm run pty:clean # see a raw pseudo-terminal work, nothing else in the way
 
-npm run install:app  # build and install into /Applications
-npm run dist         # .dmg + .zip into release/
+npm run install:app  # build and install — /Applications, or a .deb via apt
+npm run dist         # installers for this platform into release/
 ```
+
+On Linux, `npm run electron` needs Electron's sandbox helper to be setuid root
+once per checkout; the run tells you the two commands if it is not. See
+[`docs/plan/active/08-packaging.md`](docs/plan/active/08-packaging.md).
 
 `npm run electron` expects the dev server on :5173. For a standalone build,
 `npm run electron:prod` bundles the renderer first.
@@ -61,18 +65,23 @@ electron/
   pty.ts        every live pseudo-terminal
   env.ts        the login environment a GUI app does not inherit
   App.tsx       swap MockDriver here to graduate to real PTYs
-docs/plan/      overview, terminal primer, decisions, architecture, roadmap,
-                UI model
+docs/plan/      active/ what is still open; completed/ what shipped
 ```
 
 ## Reading order
 
-1. [`docs/plan/00-overview.md`](docs/plan/00-overview.md) — what and why
-2. [`docs/plan/01-terminal-primer.md`](docs/plan/01-terminal-primer.md) — how terminals actually work
-3. [`docs/plan/02-decisions.md`](docs/plan/02-decisions.md) — Electron vs Tauri, why not fork cmux
-4. [`docs/plan/03-architecture.md`](docs/plan/03-architecture.md) — the seam, cross-platform table
-5. [`docs/plan/04-roadmap.md`](docs/plan/04-roadmap.md) — the eight stages
-6. [`docs/plan/05-ui-model.md`](docs/plan/05-ui-model.md) — sessions, panes, tabs, drag, notifications
-7. [`docs/plan/06-host-interface.md`](docs/plan/06-host-interface.md) — the cross-platform host seam
-8. [`docs/plan/07-persistence.md`](docs/plan/07-persistence.md) — restore, and what it cannot do
-9. [`docs/plan/08-packaging.md`](docs/plan/08-packaging.md) — bundling, installing, signing
+Plans are split by whether there is work left: [`docs/plan/active/`](docs/plan/active)
+and [`docs/plan/completed/`](docs/plan/completed), indexed in
+[`docs/plan/README.md`](docs/plan/README.md). The numbers are the reading order
+and survive the split, so a gap in one folder is a document in the other.
+
+1. [`active/00-overview.md`](docs/plan/active/00-overview.md) — what and why
+2. [`completed/01-terminal-primer.md`](docs/plan/completed/01-terminal-primer.md) — how terminals actually work
+3. [`active/02-decisions.md`](docs/plan/active/02-decisions.md) — Electron vs Tauri, why not fork cmux
+4. [`active/03-architecture.md`](docs/plan/active/03-architecture.md) — the seam, cross-platform table
+5. [`active/04-roadmap.md`](docs/plan/active/04-roadmap.md) — the eight stages
+6. [`completed/05-ui-model.md`](docs/plan/completed/05-ui-model.md) — sessions, panes, tabs, drag, notifications
+7. [`completed/06-host-interface.md`](docs/plan/completed/06-host-interface.md) — the cross-platform host seam
+8. [`completed/07-persistence.md`](docs/plan/completed/07-persistence.md) — restore, and what it cannot do
+9. [`active/08-packaging.md`](docs/plan/active/08-packaging.md) — bundling, installing, signing
+10. [`active/12-agent-state.md`](docs/plan/active/12-agent-state.md) — what a tab knows about its agent, and how well

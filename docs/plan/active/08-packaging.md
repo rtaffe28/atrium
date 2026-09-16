@@ -1,10 +1,16 @@
 # Packaging and installing
 
 ```sh
-npm run install:app   # build and install into /Applications
-npm run dist          # build a .dmg and .zip into release/
-npm run dist:dir      # unpacked .app only — fastest way to test packaging
+npm run install:app   # build and install, the way this platform installs things
+npm run dist          # build installers for the host platform into release/
+npm run dist:dir      # unpacked app only — fastest way to test packaging
+npm run dist:mac      # or dist:linux, to name a platform explicitly
 ```
+
+`install:app` means `/Applications` on macOS and a `.deb` handed to `apt` on
+Linux. It used to mean only the first of those, on every platform, which on
+Linux built a macOS bundle and then failed to copy it into a directory that
+does not exist.
 
 `npm run electron` is a *dev* launch: it loads the renderer from the Vite dev
 server. Everything below is about the real bundle, which loads from disk and
@@ -57,10 +63,47 @@ separate helper, and `allow-dyld-environment-variables` for the login-shell
 environment probe. The app is deliberately **not** sandboxed — a sandboxed app
 cannot spawn arbitrary user tooling, which is the entire point of this one.
 
-## Windows and Linux
+## Linux, and the second helper binary
 
-Configured but unbuilt. `electron-builder --win` and `--linux` produce an NSIS
-installer and AppImage/deb respectively. Windows needs no `spawn-helper` fix
-(ConPTY is a system API) but does want Authenticode signing. Expect the
-`MAX_PATH` and long-paths issues from `03-architecture.md` to show up there
-first.
+The `.deb` builds and installs. Two things about it are worth knowing.
+
+**There is no `spawn-helper` here.** node-pty ships prebuilds for darwin and
+win32 only; on Linux it compiles from source and calls `forkpty` directly. The
+`after-pack` hook returns early rather than warning about a file that was never
+meant to exist — a build log that cries wolf about the native helper is worse
+than one that says nothing, because the real warning is the one you stop
+reading.
+
+**`chrome-sandbox` is the same lesson as `spawn-helper`, one step further.**
+Electron's sandbox helper needs to be root-owned and setuid, npm's extraction
+cannot make it so, and neither can `postinstall` — chown to root needs root. A
+dev launch from the source tree therefore aborts with a C++ `FATAL`, printed
+after the window has already failed to open:
+
+```
+The SUID sandbox helper binary was found, but is not configured correctly.
+```
+
+`scripts/native-permissions.mjs` runs before `npm run electron` and says so
+first, in a sentence, with the two commands that fix it:
+
+```sh
+sudo chown root:root node_modules/electron/dist/chrome-sandbox
+sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+```
+
+`npm run electron -- --no-sandbox` gets past it without root, at the cost of
+running the renderer unsandboxed.
+
+The packaged app never has this problem, and the reason is instructive: its
+`postinst` runs as root and picks the mode from the kernel it finds — setuid
+where user namespaces are unavailable, plain `0755` where they work and
+Chromium can use the namespace sandbox instead. That is a decision only an
+installer can make.
+
+## Windows
+
+Configured but unbuilt. `electron-builder --win` produces an NSIS installer.
+Windows needs no `spawn-helper` fix (ConPTY is a system API) but does want
+Authenticode signing. Expect the `MAX_PATH` and long-paths issues from
+`03-architecture.md` to show up there first.

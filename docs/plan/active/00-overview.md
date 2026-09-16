@@ -38,5 +38,5 @@ is to iterate on the interface at browser speed before paying for any systems
 work.
 
 The interface model — sessions, split panes, tabs, drag targets, derived state
-and notifications — is documented in `05-ui-model.md`. See `04-roadmap.md` for
+and notifications — is documented in `../completed/05-ui-model.md`. See `04-roadmap.md` for
 what comes next.

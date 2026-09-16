@@ -1,7 +1,7 @@
 // Watch a pseudo-terminal work.
 //
 // The goal is not to build anything. It is to see the three pieces from
-// ../../docs/plan/01-terminal-primer.md actually moving:
+// ../../docs/plan/completed/01-terminal-primer.md actually moving:
 //
 //   - we hold the MASTER end of a PTY (the `term` object below)
 //   - the shell holds the SLAVE end as its stdin/stdout/stderr
