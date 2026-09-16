@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { spawn, type IPty } from 'node-pty';
 import type { WebContents } from 'electron';
 import { shellStartup, shimDirectory } from './shims';
@@ -20,6 +22,40 @@ interface Entry {
 }
 
 const SCROLLBACK_LIMIT = 2_000_000; // bytes; ~ a few thousand lines
+
+/** How long an agent gets to exit on its own before the shell is torn down. */
+const GRACEFUL_EXIT_MS = 2000;
+
+const run = promisify(execFile);
+
+/** Every descendant pid of the given roots, deepest last. */
+async function descendants(roots: number[]): Promise<number[]> {
+  const { stdout } = await run('ps', ['-axo', 'pid=,ppid=']).catch(() => ({ stdout: '' }));
+  const children = new Map<number, number[]>();
+  for (const line of stdout.split('\n')) {
+    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+    if (!pid || !ppid) continue;
+    children.set(ppid, [...(children.get(ppid) ?? []), pid]);
+  }
+  const found: number[] = [];
+  const walk = (pid: number) => {
+    for (const child of children.get(pid) ?? []) {
+      found.push(child);
+      walk(child);
+    }
+  };
+  for (const root of roots) walk(root);
+  return found;
+}
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Every live pseudo-terminal, owned by the main process.
@@ -144,6 +180,40 @@ export class PtyManager {
 
   killAll() {
     for (const id of [...this.entries.keys()]) this.kill(id);
+  }
+
+  /**
+   * Let the agents exit before tearing the shells down.
+   *
+   * Killing the pty sends SIGHUP to the shell, which hangs up its jobs and
+   * prints "zsh: warning: 1 jobs SIGHUPed" — noise that then lives in the
+   * scrollback forever, since a restored tab replays it. Worse, an agent
+   * killed that way never gets to finish writing its session, and a session
+   * that was not written cannot be resumed, which is the thing restore exists
+   * to do.
+   *
+   * So the agents are asked to stop first and given a moment, and only what is
+   * still alive afterwards is taken down hard.
+   */
+  async shutdown(): Promise<void> {
+    const shells = [...this.entries.values()].map((entry) => entry.pty.pid);
+    if (shells.length === 0) return;
+
+    const agents = await descendants(shells);
+    for (const pid of agents) {
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {
+        // Already gone.
+      }
+    }
+
+    const deadline = Date.now() + GRACEFUL_EXIT_MS;
+    while (Date.now() < deadline && agents.some(alive)) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    this.killAll();
   }
 
   bind(contents: WebContents) {

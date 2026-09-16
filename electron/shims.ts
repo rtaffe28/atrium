@@ -120,48 +120,64 @@ export function shimDirectory(): string | null {
 
 
 /**
- * Shell startup files that put the shim directory back at the front of PATH.
+ * Shell integration: put the shim directory back in front of PATH.
  *
- * Prepending it when we spawn the shell is not enough: a login shell sources
- * the user's rc files afterwards, and those rebuild PATH — measured on a normal
+ * Prepending it when we spawn the shell is not enough — a login shell sources
+ * the user's rc files afterwards and those rebuild PATH. Measured on a normal
  * zsh setup, `command -v claude` inside a session resolved to
- * ~/.local/bin/claude rather than the shim. The only place to win is *after*
- * the user's own configuration has run, which is what these files are for.
+ * ~/.local/bin/claude rather than the shim.
  *
- * This is the same trick editors use for shell integration. The user's files
- * are sourced first and unchanged, and ZDOTDIR is handed back afterwards so
- * anything they run later sees their own setup.
+ * So zsh is pointed at our own ZDOTDIR, and the *only* file we provide is
+ * `.zshenv`, which hands ZDOTDIR straight back before doing anything else.
+ * That ordering matters more than it looks: `/etc/zshrc` derives HISTFILE from
+ * ZDOTDIR, so a wrapper that holds onto it through startup quietly writes the
+ * user's shell history into a temp directory. Restoring first means zsh then
+ * finds .zprofile and .zshrc in their real place and loads them normally.
+ *
+ * The PATH fix therefore cannot live in an rc file of ours — there is none
+ * left. It runs from a one-shot `precmd` hook instead, which fires after all
+ * of the user's configuration and before their first prompt.
  */
 export interface ShellStartup {
   env: Record<string, string>;
   args: string[];
 }
 
+const ZSHENV = `# Atrium shell integration.
+#
+# Hand ZDOTDIR back immediately: /etc/zshrc derives HISTFILE from it, and zsh
+# needs to find the user's own .zprofile and .zshrc in their real location.
+if [[ -n "\${ATRIUM_USER_ZDOTDIR+X}" ]]; then
+  builtin export ZDOTDIR="$ATRIUM_USER_ZDOTDIR"
+  builtin unset ATRIUM_USER_ZDOTDIR
+else
+  builtin unset ZDOTDIR
+fi
+
+_atrium_file="\${ZDOTDIR-$HOME}/.zshenv"
+[[ -r "$_atrium_file" ]] && builtin source -- "$_atrium_file"
+builtin unset _atrium_file
+
+# Put the agent shims back in front once the user's configuration has run.
+# A precmd hook is the first moment that is true.
+if [[ -o interactive && -n "\${ATRIUM_SHIM_DIR:-}" ]]; then
+  _atrium_restore_path() {
+    builtin export PATH="$ATRIUM_SHIM_DIR:$PATH"
+    add-zsh-hook -d precmd _atrium_restore_path
+    builtin unset -f _atrium_restore_path
+  }
+  builtin autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _atrium_restore_path
+fi
+`;
+
 let startupDir: string | null = null;
 
-function zshStartup(shims: string): string | null {
+function zshStartup(): string | null {
   if (startupDir) return startupDir;
   try {
     const dir = mkdtempSync(join(tmpdir(), 'atrium-zdotdir-'));
-    const sourceUser = (file: string) =>
-      `[ -f "\${ATRIUM_USER_ZDOTDIR:-$HOME}/${file}" ] && ` +
-      `. "\${ATRIUM_USER_ZDOTDIR:-$HOME}/${file}"
-`;
-
-    writeFileSync(join(dir, '.zshenv'), sourceUser('.zshenv'), 'utf8');
-    writeFileSync(join(dir, '.zprofile'), sourceUser('.zprofile'), 'utf8');
-    writeFileSync(join(dir, '.zlogin'), sourceUser('.zlogin'), 'utf8');
-    writeFileSync(
-      join(dir, '.zshrc'),
-      sourceUser('.zshrc') +
-        `# Atrium: after your configuration, so agent shims win.
-` +
-        `export PATH="${shims}:$PATH"
-` +
-        `export ZDOTDIR="\${ATRIUM_USER_ZDOTDIR:-$HOME}"
-`,
-      'utf8',
-    );
+    writeFileSync(join(dir, '.zshenv'), ZSHENV, 'utf8');
     startupDir = dir;
     return dir;
   } catch {
@@ -174,14 +190,14 @@ export function shellStartup(shellPath: string): ShellStartup {
   const shims = shimDirectory();
   if (!shims) return { env: {}, args: [] };
 
-  const name = shellPath.split('/').pop() ?? '';
-  if (name === 'zsh') {
-    const dir = zshStartup(shims);
+  if ((shellPath.split('/').pop() ?? '') === 'zsh') {
+    const dir = zshStartup();
     if (dir) {
       return {
         env: {
           ZDOTDIR: dir,
-          ATRIUM_USER_ZDOTDIR: process.env.ZDOTDIR ?? process.env.HOME ?? '',
+          ATRIUM_USER_ZDOTDIR: process.env.ZDOTDIR ?? '',
+          ATRIUM_SHIM_DIR: shims,
         },
         args: [],
       };

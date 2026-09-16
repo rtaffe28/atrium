@@ -207,8 +207,16 @@ app.whenReady().then(async () => {
 });
 
 // Every pty is a child of this process; leaving them behind is the orphan
-// problem the roadmap's stage 8 is about. Kill them explicitly.
-app.on('before-quit', () => ptys?.killAll());
+// problem the roadmap's stage 8 is about. Quitting is deferred so the agents
+// can exit on their own first — an agent killed mid-write never finishes
+// saving its session, and an unsaved session cannot be resumed.
+let shuttingDown = false;
+app.on('before-quit', (event) => {
+  if (shuttingDown || !ptys) return;
+  shuttingDown = true;
+  event.preventDefault();
+  void ptys.shutdown().finally(() => app.quit());
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
