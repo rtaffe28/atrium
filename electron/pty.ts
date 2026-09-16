@@ -24,7 +24,7 @@ interface Entry {
 const SCROLLBACK_LIMIT = 2_000_000; // bytes; ~ a few thousand lines
 
 /** How long an agent gets to exit on its own before the shell is torn down. */
-const GRACEFUL_EXIT_MS = 2000;
+const GRACEFUL_EXIT_MS = 5000;
 
 const run = promisify(execFile);
 
@@ -213,7 +213,26 @@ export class PtyManager {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
+    // Anything still running gets killed outright, and that is deliberate:
+    // the shell must have no jobs left when it is hung up, or it prints the
+    // warning regardless. An agent caught mid-startup has not installed its
+    // signal handler yet and will sit through SIGTERM indefinitely.
+    const stubborn = agents.filter(alive);
+    for (const pid of stubborn) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Won the race.
+      }
+    }
+    if (stubborn.length > 0) await new Promise((resolve) => setTimeout(resolve, 300));
+
     this.killAll();
+  }
+
+  /** How many sessions are running something other than their shell. */
+  busyCount(shellName: string): number {
+    return Object.values(this.foreground()).filter((name) => name && name !== shellName).length;
   }
 
   bind(contents: WebContents) {

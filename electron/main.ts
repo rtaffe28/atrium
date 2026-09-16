@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { readFile, writeFile, rename, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 
 let ptys: PtyManager;
+let loginShellName = 'zsh';
 
 /**
  * Space to leave clear of the OS window controls.
@@ -53,6 +54,13 @@ function createWindow() {
   });
 
   window.once('ready-to-show', () => window.show());
+
+  // The close button quits, after the same confirmation as Cmd-Q.
+  window.on('close', (event) => {
+    if (shuttingDown) return;
+    event.preventDefault();
+    void requestQuit(window);
+  });
 
   // A packaged app whose renderer fails to load shows a blank window and says
   // nothing at all. These two turned a silent failure into a one-line answer.
@@ -99,6 +107,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   const env = await resolveLoginEnv();
+  loginShellName = (env.SHELL ?? '/bin/zsh').split('/').pop() ?? 'zsh';
   ptys = new PtyManager(env, () => {});
 
   const insets = chromeInsets();
@@ -206,16 +215,51 @@ app.whenReady().then(async () => {
   });
 });
 
-// Every pty is a child of this process; leaving them behind is the orphan
-// problem the roadmap's stage 8 is about. Quitting is deferred so the agents
-// can exit on their own first — an agent killed mid-write never finishes
-// saving its session, and an unsaved session cannot be resumed.
+/**
+ * Quitting, asked for once and then carried out properly.
+ *
+ * Closing the window quits the app rather than leaving it running with nothing
+ * on screen — there is no document-less state worth keeping. Quitting stops
+ * live agents, so it asks first; and it is deferred until they have exited,
+ * because an agent killed mid-write never finishes saving its session, and an
+ * unsaved session cannot be resumed.
+ */
 let shuttingDown = false;
-app.on('before-quit', (event) => {
-  if (shuttingDown || !ptys) return;
+let asking = false;
+
+async function requestQuit(window?: BrowserWindow) {
+  if (shuttingDown || asking) return;
+  asking = true;
+  try {
+    const busy = ptys?.busyCount(loginShellName) ?? 0;
+    const choice = await dialog.showMessageBox(window ?? BrowserWindow.getAllWindows()[0], {
+      type: 'question',
+      buttons: ['Cancel', 'Quit Atrium'],
+      defaultId: 1,
+      cancelId: 0,
+      message: 'Quit Atrium?',
+      detail:
+        busy > 0
+          ? `${busy} session${busy === 1 ? ' is' : 's are'} running something. ` +
+            'They will be stopped, and reopened where they left off next time.'
+          : 'Your sessions will be reopened where they left off next time.',
+    });
+    if (choice.response !== 1) return;
+  } catch {
+    // No window to attach a dialog to; quit rather than becoming unquittable.
+  } finally {
+    asking = false;
+  }
+
   shuttingDown = true;
+  await ptys?.shutdown();
+  app.quit();
+}
+
+app.on('before-quit', (event) => {
+  if (shuttingDown) return;
   event.preventDefault();
-  void ptys.shutdown().finally(() => app.quit());
+  void requestQuit();
 });
 
 app.on('window-all-closed', () => {
