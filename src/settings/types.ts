@@ -37,15 +37,6 @@ export interface Settings {
    * trusted once and keeps its own history.
    */
   defaultCwd: string;
-  /**
-   * How a captured command is rewritten when a session is restored, one
-   * `command = replacement` per line.
-   *
-   * Usually empty. Claude Code is resumed by session id instead, which is
-   * exact where a rewrite to `--continue` is not — and an explicit flag here
-   * would override that. This stays for tools that need it.
-   */
-  restoreOverrides: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,7 +46,6 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalFontSize: 13,
   defaultCommand: 'claude',
   defaultCwd: '~',
-  restoreOverrides: '',
 };
 
 export const FONT_SIZES = [11, 12, 13, 14, 16] as const;

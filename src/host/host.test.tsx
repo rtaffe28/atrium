@@ -75,12 +75,7 @@ describe('host injection', () => {
   it('reports its own capabilities honestly', () => {
     const host = new MockHost();
     expect(host.capabilities.pty).toBe(false); // scripted output, not processes
-    expect(host.capabilities.files).toBe(false); // no filesystem in a browser tab
     expect(host.capabilities.browserSurface).toBe('iframe');
   });
 
-  it('throws UnsupportedError from a driver whose capability is false', async () => {
-    const host = new MockHost();
-    await expect(host.files.read('/etc/hosts')).rejects.toThrow(/does not support "files"/);
-  });
 });

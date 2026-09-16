@@ -54,131 +54,51 @@ function firstTerminalTab(driver: ElectronSessionDriver) {
   return { session, tabId: Object.keys(session.tabs)[0] };
 }
 
-describe('capturing what is running in a tab', () => {
-  it('records the full typed line when it matches the foreground process', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
-    const { tabId } = firstTerminalTab(driver);
+const ESC = '\x1b';
+const osc = (body: string) => `${ESC}]${body}\x07`;
 
-    // Type a command with arguments, then let the pty report what is running.
-    for (const char of 'claude --continue') driver.write(tabId, char);
-    driver.write(tabId, '\r');
-    f.setForeground({ [tabId]: 'claude' });
-
-    await driver.refreshCommands();
-
-    const tab = driver.list()[0].tabs[tabId];
-    // Arguments are the point: bare `claude` would start a new conversation.
-    expect(tab.command).toBe('claude --continue');
-    expect(tab.title).toBe('claude');
-    driver.dispose();
-  });
-
-  it('trusts what was typed over a process that renamed itself', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
-    const { tabId } = firstTerminalTab(driver);
-
-    driver.write(tabId, 'claude\r');
-    // Claude Code reports as its version. Trusting this name recorded
-    // "2.1.273" as the command, and restore typed that into a shell.
-    f.setForeground({ [tabId]: '2.1.273' });
-
-    await driver.refreshCommands();
-    const tab = driver.list()[0].tabs[tabId];
-    expect(tab.command).toBe('claude');
-    expect(tab.title).toBe('claude');
-    driver.dispose();
-  });
-
-  it('prefers the wrapper that was typed over the process it spawned', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
-    const { tabId } = firstTerminalTab(driver);
-
-    driver.write(tabId, 'npm run dev\r');
-    f.setForeground({ [tabId]: 'node' });
-
-    await driver.refreshCommands();
-    // Restoring `npm run dev` is useful; restoring bare `node` is not.
-    expect(driver.list()[0].tabs[tabId].command).toBe('npm run dev');
-    driver.dispose();
-  });
-
-  it('falls back to the process name for a tab nobody typed in', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
-    const { tabId } = firstTerminalTab(driver);
-
-    f.setForeground({ [tabId]: 'vim' });
-
-    await driver.refreshCommands();
-    expect(driver.list()[0].tabs[tabId].command).toBe('vim');
-    driver.dispose();
-  });
-
-  it('records nothing when the process name could not be typed', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
-    const { tabId } = firstTerminalTab(driver);
-
-    f.setForeground({ [tabId]: '2.1.273' });
-
-    await driver.refreshCommands();
-    expect(driver.list()[0].tabs[tabId].command).toBeUndefined();
-    driver.dispose();
-  });
-
-  it('records nothing for a tab that has only ever sat at a prompt', async () => {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
-    const { tabId } = firstTerminalTab(driver);
-
-    driver.write(tabId, 'echo hi\r');
-    f.setForeground({ [tabId]: 'zsh' });
-
-    await driver.refreshCommands();
-    expect(driver.list()[0].tabs[tabId].command).toBeUndefined();
-    driver.dispose();
-  });
-
+describe('what a tab is running, as reported by the shell', () => {
   /**
-   * The tab has to remember what it was doing, not only what it is doing.
-   * Exiting an agent and then quitting used to leave a bare shell on restore,
-   * throwing away a conversation the tab still had the id for.
+   * This used to be inferred, and was wrong in practice: the pty's foreground
+   * process lies when a process renames itself — Claude Code reports as its
+   * own version, and "2.1.273" was once recorded as a tab's command.
    */
-  it('keeps the last command after the agent exits', async () => {
+  it('records the command line the shell announced, verbatim', async () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
     const { tabId } = firstTerminalTab(driver);
 
-    driver.write(tabId, 'claude\r');
-    f.setForeground({ [tabId]: 'claude' });
-    await driver.refreshCommands();
-    expect(driver.list()[0].tabs[tabId].command).toBe('claude');
-
-    // The agent exits; the shell is idle again.
-    f.setForeground({ [tabId]: 'zsh' });
-    await driver.refreshCommands();
+    f.emit(tabId, osc('633;E;claude --dangerously-skip-permissions'));
 
     const tab = driver.list()[0].tabs[tabId];
-    expect(tab.command, 'restore needs this').toBe('claude');
-    expect(tab.title, 'but the tab should stop claiming it is running').toBe('zsh');
+    expect(tab.command).toBe('claude --dangerously-skip-permissions');
+    expect(tab.title).toBe('claude');
     driver.dispose();
   });
 
-  it('forgets a half-typed line when something interactive takes over', async () => {
+  it('returns the title to the shell when the command finishes', async () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
     const { tabId } = firstTerminalTab(driver);
 
-    driver.write(tabId, 'clau');
-    driver.write(tabId, '\x1b'); // an escape means this is not a command line
-    driver.write(tabId, '\r');
-    f.setForeground({ [tabId]: 'claude' });
+    f.emit(tabId, osc('633;E;npm run dev'));
+    expect(driver.list()[0].tabs[tabId].title).toBe('npm');
 
-    await driver.refreshCommands();
-    expect(driver.list()[0].tabs[tabId].command).toBe('claude');
+    f.emit(tabId, osc('133;D;0'));
+    const tab = driver.list()[0].tabs[tabId];
+    expect(tab.title, 'idle again').toBe('zsh');
+    // But the command stays: it is what a restore has to go on.
+    expect(tab.command, 'restore needs this').toBe('npm run dev');
+    driver.dispose();
+  });
+
+  it('is unbothered by a command line containing semicolons', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');
+    const { tabId } = firstTerminalTab(driver);
+
+    f.emit(tabId, osc('633;E;a; b; c'));
+    expect(driver.list()[0].tabs[tabId].command).toBe('a; b; c');
     driver.dispose();
   });
 });

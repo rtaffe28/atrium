@@ -14,12 +14,6 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    // Sessions are resumed by id now. Leaving the old default in place would
-    // pass --continue explicitly, which the shim honours and which resumes
-    // "most recent in this directory" rather than this tab's conversation.
-    if (parsed.restoreOverrides?.trim() === 'claude = claude --continue') {
-      parsed.restoreOverrides = '';
-    }
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
@@ -40,23 +34,3 @@ export function saveSettings(settings: Settings): void {
   }
 }
 
-/**
- * Rewrite a captured command into the form that resumes it.
- *
- * `claude` starts a fresh conversation; `claude --continue` picks up the last
- * one in that directory. Restoring a session is pointless if it hands you a
- * blank agent, so the mapping is applied on the way back in.
- */
-export function applyRestoreOverride(command: string | undefined, rules: string): string | undefined {
-  if (!command) return command;
-  const base = command.trim().split(/\s+/)[0];
-
-  for (const line of rules.split('\n')) {
-    const [from, ...rest] = line.split('=');
-    if (rest.length === 0) continue;
-    if (from.trim() !== base) continue;
-    const to = rest.join('=').trim();
-    return to || undefined;
-  }
-  return command;
-}

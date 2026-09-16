@@ -119,27 +119,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </section>
 
         <section className="settings-section">
-          <h3>Restoring a session</h3>
-          <label className="setting-row stacked">
-            <span className="setting-text">
-              <span className="setting-label">Command overrides</span>
-              <span className="setting-hint">
-                One <code>command = replacement</code> per line. Applied when a
-                saved session reopens, so an agent resumes instead of starting
-                blank.
-              </span>
-            </span>
-            <textarea
-              className="setting-input area"
-              rows={3}
-              spellCheck={false}
-              value={settings.restoreOverrides}
-              onChange={(event) => update({ restoreOverrides: event.target.value })}
-            />
-          </label>
-        </section>
-
-        <section className="settings-section">
           <h3>Alerts</h3>
           <Toggle
             label="Play sounds"

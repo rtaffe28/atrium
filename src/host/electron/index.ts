@@ -2,8 +2,6 @@ import type {
   PersistedWorkspace,
   WorkspaceDriver,
   Capabilities,
-  FileDriver,
-  GitDriver,
   Host,
   NotifyDriver,
   NotifyKind,
@@ -12,7 +10,6 @@ import type {
   WindowDriver,
   WindowState,
 } from '../types';
-import { UnsupportedError } from '../types';
 import type { AtriumBridge, HostInfo } from './bridge';
 import { ElectronSessionDriver, type RestoreInput } from './session';
 import { WebviewSurfaces } from './surfaces';
@@ -71,34 +68,6 @@ class ElectronWindowDriver implements WindowDriver {
   }
 }
 
-/** Not wired yet — capabilities say so and these throw if called anyway. */
-class PendingGit implements GitDriver {
-  async listWorktrees(): Promise<never> {
-    throw new UnsupportedError('git');
-  }
-  async createWorktree(): Promise<never> {
-    throw new UnsupportedError('git');
-  }
-  async removeWorktree(): Promise<never> {
-    throw new UnsupportedError('git');
-  }
-  async diffStat(): Promise<never> {
-    throw new UnsupportedError('git');
-  }
-}
-
-class PendingFiles implements FileDriver {
-  async read(): Promise<never> {
-    throw new UnsupportedError('files');
-  }
-  async write(): Promise<never> {
-    throw new UnsupportedError('files');
-  }
-  watch(): Unsubscribe {
-    throw new UnsupportedError('files');
-  }
-}
-
 /** Workspace state as a JSON file in the app's userData directory. */
 class FileWorkspace implements WorkspaceDriver {
   // Roomier than localStorage: this is a file on disk, and a long scrollback
@@ -123,8 +92,6 @@ export class ElectronHost implements Host {
   readonly name = 'electron';
   readonly sessions: ElectronSessionDriver;
   readonly surfaces = new WebviewSurfaces();
-  readonly git = new PendingGit();
-  readonly files = new PendingFiles();
   readonly notify: NativeNotify;
   readonly window: ElectronWindowDriver;
   readonly workspace: FileWorkspace;
@@ -140,8 +107,6 @@ export class ElectronHost implements Host {
       browserSurface: 'webview',
       // Both are real capabilities of this host that are simply not built yet.
       // Saying false is the honest answer and keeps the UI from offering them.
-      git: false,
-      files: false,
       nativeNotifications: true,
       customChrome: true,
       persistence: true,

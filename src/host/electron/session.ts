@@ -6,7 +6,6 @@ import {
   scanShellEvents,
   type ShellEventScan,
 } from '../../session/shellEvents';
-import { plausibleCommand } from '../../session/command';
 import { sanitizeHistory } from '../../session/history';
 import type { Session } from '../../session/types';
 import type { AtriumBridge } from './bridge';
@@ -86,10 +85,6 @@ interface Stream {
 export class ElectronSessionDriver extends SessionStore {
   private streams = new Map<string, Stream>();
   private agents = new Set<string>();
-  /** Characters typed since the last Enter, so we can recover a full command. */
-  private typing = new Map<string, string>();
-  /** The last line submitted in each tab — the command with its arguments. */
-  private submitted = new Map<string, string>();
   /** Commands waiting to be typed into a freshly spawned shell. */
   private autorun = new Map<string, { command: string; timer: number }>();
   /** When each tab's shell started, so a Codex thread can be matched to it. */
@@ -165,38 +160,7 @@ export class ElectronSessionDriver extends SessionStore {
         const running = foreground[tab.id];
         if (!running) continue;
 
-        const idle = running === this.shellName;
-        const line = this.submitted.get(tab.id) ?? '';
-
-        // `command` is what the tab was last *doing*, not what it is doing this
-        // second. Clearing it when a process exits threw away the one thing
-        // restore needs: exit an agent, quit, and the tab came back as a bare
-        // shell even though it still knew which conversation it owned.
-        // Only a guess, and only used where the shell is not reporting —
-        // another shell, or one whose rc files refused our integration.
-        const command = idle ? tab.command : tab.command || line || plausibleCommand(running);
-
-        // The title does track the live state, so a finished tab stops
-        // claiming something is running in it.
-        const title = idle
-          ? this.shellName
-          : (command?.split(/\s+/)[0] ?? plausibleCommand(running) ?? running);
-
-        // The shim writes the conversation it opened, which is how a tab
-        // learns its id without the agent being asked — including after the
-        // user exited and started a new one.
-        if (running !== this.shellName) {
-          void this.bridge.agent
-            .currentSession(tab.id)
-            .then((agentSessionId) => {
-              if (!agentSessionId || agentSessionId === tab.agentSessionId) return;
-              this.update(session.id, (s) => ({
-                ...s,
-                tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], agentSessionId } },
-              }));
-            })
-            .catch(() => {});
-        }
+        if (running !== 'codex' || tab.codexSessionId) continue;
 
         // Codex writes its thread id only after it starts, so this is the
         // first moment the tab can learn which conversation it owns.
@@ -213,11 +177,6 @@ export class ElectronSessionDriver extends SessionStore {
             .catch(() => {});
         }
 
-        if (tab.command === command && tab.title === title) continue;
-        this.update(session.id, (s) => ({
-          ...s,
-          tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], command, title } },
-        }));
       }
     }
   }
@@ -268,7 +227,6 @@ export class ElectronSessionDriver extends SessionStore {
       window.clearTimeout(queued.timer);
       queued.timer = window.setTimeout(() => {
         this.autorun.delete(tabId);
-        this.submitted.set(tabId, queued.command);
         this.bridge.pty.write(tabId, `${queued.command}\r`);
       }, SHELL_SETTLE_MS);
     }
@@ -394,8 +352,6 @@ export class ElectronSessionDriver extends SessionStore {
     if (queued) window.clearTimeout(queued.timer);
     this.streams.delete(tabId);
     this.agents.delete(tabId);
-    this.typing.delete(tabId);
-    this.submitted.delete(tabId);
     this.autorun.delete(tabId);
     this.spawnedAt.delete(tabId);
     this.bridge.pty.kill(tabId);
@@ -431,31 +387,10 @@ export class ElectronSessionDriver extends SessionStore {
       stream.awaitingHuman = false;
       this.setAgentState(tabId, 'working');
     }
-    this.captureTyping(tabId, data);
     // A real PTY echoes; unlike the mock we must not echo ourselves.
     this.bridge.pty.write(tabId, data);
   }
 
-  /** Reassemble the line being typed, so a submitted command keeps its args. */
-  private captureTyping(tabId: string, data: string): void {
-    let buffer = this.typing.get(tabId) ?? '';
-    for (const char of data) {
-      if (char === '\r' || char === '\n') {
-        const line = buffer.trim();
-        if (line) this.submitted.set(tabId, line);
-        buffer = '';
-      } else if (char === '\x7f' || char === '\b') {
-        buffer = buffer.slice(0, -1);
-      } else if (char >= ' ') {
-        buffer += char;
-      } else {
-        // Control characters mean something interactive is happening; whatever
-        // was half-typed is not a command line.
-        buffer = '';
-      }
-    }
-    this.typing.set(tabId, buffer);
-  }
 
   resize(tabId: string, cols: number, rows: number): void {
     this.bridge.pty.resize(tabId, cols, rows);
