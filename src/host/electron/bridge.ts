@@ -29,7 +29,10 @@ export interface AtriumBridge {
     onData(handler: (id: string, data: string) => void): () => void;
     onExit(handler: (id: string, code: number) => void): () => void;
   };
-  agent: { hasSession(sessionId: string): Promise<boolean> };
+  agent: {
+    hasSession(sessionId: string): Promise<boolean>;
+    newestCodexSession(since: number): Promise<string | null>;
+  };
   notify: { post(notice: { title: string; body: string; tag: string }): Promise<void> };
   workspace: {
     load(): Promise<PersistedWorkspace | null>;

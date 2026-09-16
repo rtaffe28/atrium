@@ -42,6 +42,13 @@ export interface Tab {
    * working in the same directory.
    */
   agentSessionId?: string;
+  /**
+   * The Codex thread this tab owns.
+   *
+   * Observed rather than assigned: codex has no --session-id, so this appears
+   * only after the tab has run codex once and written its rollout file.
+   */
+  codexSessionId?: string;
   /** Terminal tabs running an agent. Drives the rail and notifications. */
   agentState?: AgentState;
   /** Browser tabs only. */
@@ -106,6 +113,13 @@ export interface CreateSessionOptions {
    * working in the same directory.
    */
   agentSessionId?: string;
+  /**
+   * The Codex thread this tab owns.
+   *
+   * Observed rather than assigned: codex has no --session-id, so this appears
+   * only after the tab has run codex once and written its rollout file.
+   */
+  codexSessionId?: string;
   /** Seed the session with this tab instead of a fresh agent terminal. */
   adopt?: Tab;
 }

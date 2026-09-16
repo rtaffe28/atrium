@@ -1,6 +1,6 @@
 import { SessionStore } from '../../session/store';
 import type { AgentState, DataHandler, Unsubscribe } from '../../session/types';
-import { withSessionFlag } from '../../session/agentFlags';
+import { agentOf, withSessionFlag } from '../../session/agentFlags';
 import { newBellScan, scanForBell, type BellScan } from '../../session/bell';
 import { plausibleCommand } from '../../session/command';
 import { sanitizeHistory } from '../../session/history';
@@ -76,6 +76,8 @@ export class ElectronSessionDriver extends SessionStore {
   private submitted = new Map<string, string>();
   /** Commands waiting to be typed into a freshly spawned shell. */
   private autorun = new Map<string, { command: string; timer: number }>();
+  /** When each tab's shell started, so a Codex thread can be matched to it. */
+  private spawnedAt = new Map<string, number>();
   private poll = 0;
 
   private bridge: AtriumBridge;
@@ -146,6 +148,21 @@ export class ElectronSessionDriver extends SessionStore {
         const title = idle
           ? this.shellName
           : (command?.split(/\s+/)[0] ?? plausibleCommand(running) ?? running);
+
+        // Codex writes its thread id only after it starts, so this is the
+        // first moment the tab can learn which conversation it owns.
+        if (running === 'codex' && !tab.codexSessionId) {
+          void this.bridge.agent
+            .newestCodexSession(this.spawnedAt.get(tab.id) ?? 0)
+            .then((codexSessionId) => {
+              if (!codexSessionId) return;
+              this.update(session.id, (s) => ({
+                ...s,
+                tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], codexSessionId } },
+              }));
+            })
+            .catch(() => {});
+        }
 
         if (tab.command === command && tab.title === title) continue;
         this.update(session.id, (s) => ({
@@ -242,7 +259,8 @@ export class ElectronSessionDriver extends SessionStore {
 
     // The shim in this session's PATH reads this and binds the conversation to
     // it, so the tab and the agent session stay the same thing across restarts.
-    const agentSession = this.sessionOfTab(tabId)?.tabs[tabId]?.agentSessionId;
+    const tab = this.sessionOfTab(tabId)?.tabs[tabId];
+    const agentSession = tab?.agentSessionId;
 
     // Always spawn the shell, then type the command into it. Replacing the
     // shell would mean the tab vanishes the moment the command exits, and it
@@ -252,22 +270,35 @@ export class ElectronSessionDriver extends SessionStore {
       cwd: cwd.startsWith('~') ? cwd.replace('~', this.home) : cwd,
       cols: 80,
       rows: 24,
-      ...(agentSession ? { env: { ATRIUM_AGENT_SESSION: agentSession } } : {}),
+      env: {
+        ...(agentSession ? { ATRIUM_AGENT_SESSION: agentSession } : {}),
+        ...(tab?.codexSessionId ? { ATRIUM_CODEX_SESSION: tab.codexSessionId } : {}),
+      },
     });
+    this.spawnedAt.set(tabId, Date.now());
 
     if (wanted && wanted !== this.shellName) {
       // Queued straight away so a fast-starting shell is never typed into
       // before there is anything to type, then rewritten once the main process
       // says whether this conversation already exists.
       this.autorun.set(tabId, { command: wanted, timer: 0 });
-      if (agentSession) {
-        void this.bridge.agent
-          .hasSession(agentSession)
-          .then((exists) => {
-            const queued = this.autorun.get(tabId);
-            if (queued) queued.command = withSessionFlag(wanted, agentSession, exists);
-          })
-          .catch(() => {});
+
+      const codexSession = tab?.codexSessionId;
+      const bind = (claudeExists: boolean) => {
+        const queued = this.autorun.get(tabId);
+        if (queued) {
+          queued.command = withSessionFlag(wanted, {
+            claude: agentSession,
+            codex: codexSession,
+            claudeExists,
+          });
+        }
+      };
+
+      if (agentOf(wanted) === 'claude' && agentSession) {
+        void this.bridge.agent.hasSession(agentSession).then(bind).catch(() => bind(false));
+      } else {
+        bind(false);
       }
     }
   }
@@ -282,6 +313,7 @@ export class ElectronSessionDriver extends SessionStore {
     this.typing.delete(tabId);
     this.submitted.delete(tabId);
     this.autorun.delete(tabId);
+    this.spawnedAt.delete(tabId);
     this.bridge.pty.kill(tabId);
   }
 

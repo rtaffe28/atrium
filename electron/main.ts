@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron';
-import { readFile, writeFile, rename, readdir } from 'node:fs/promises';
+import { readFile, writeFile, rename, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
@@ -159,6 +159,39 @@ app.whenReady().then(async () => {
       // No projects directory yet: nothing has ever been started.
     }
     return false;
+  });
+
+  /**
+   * The id of the Codex session a tab just started.
+   *
+   * Codex has no --session-id, so the id can only be observed: it writes
+   * ~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<uuid>.jsonl, and the newest
+   * one created since the tab spawned is that tab's. Passing `since` is what
+   * keeps two codex tabs from claiming each other's thread.
+   */
+  ipcMain.handle('agent:newest-codex-session', async (_e, since: number) => {
+    const root = path.join(env.HOME ?? '', '.codex', 'sessions');
+    const uuid = /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+    let best: { id: string; at: number } | null = null;
+
+    const walk = async (dir: string, depth: number): Promise<void> => {
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (depth > 0) await walk(full, depth - 1);
+          continue;
+        }
+        const match = uuid.exec(entry.name);
+        if (!match) continue;
+        const info = await stat(full).catch(() => null);
+        if (!info || info.mtimeMs < since) continue;
+        if (!best || info.mtimeMs > best.at) best = { id: match[1], at: info.mtimeMs };
+      }
+    };
+
+    await walk(root, 3);
+    return best?.id ?? null;
   });
 
   ipcMain.handle('notify:post', (_e, notice: { title: string; body: string; tag: string }) => {

@@ -53,39 +53,54 @@ conversation. The first attempt used `--continue`, which resumes whichever
 conversation ran most recently in that directory — already wrong with two tabs
 open on one repo, and no help at all for a session you started by hand.
 
-So Atrium stops trying to work out which conversation a tab had and decides it
-instead. Every terminal tab is given a uuid when it is created, and the command
-is rewritten on the way to the shell:
+So Atrium stops trying to work out which conversation a tab had and binds the
+two together. The two agents need opposite approaches, because their CLIs
+differ.
+
+**Claude Code takes `--session-id`**, so the id is decided before the agent
+ever runs. Every terminal tab is given a uuid when it is created, and the
+command is rewritten on the way to the shell:
 
 - first run: `claude --session-id <uuid>` — the tab claims the conversation
 - afterwards: `claude --resume <uuid>` — the tab reopens its own
 
 Which of the two is chosen comes from the main process, because Claude Code
 keeps one JSONL per conversation under `~/.claude/projects` named by session
-id, so "has this run before" is just whether that file exists. An explicit
-`--resume`, `--continue` or `--session-id` from the user always wins; they may
-be deliberately opening something else in that tab.
+id, so "has this run before" is just whether that file exists.
+
+**Codex has no equivalent.** Its id can only be observed, from the rollout file
+it writes at `~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<uuid>.jsonl`. So a
+fresh codex tab runs plainly, Atrium notices the thread that appeared *after
+that tab spawned* — which is what stops two codex tabs claiming each other's —
+and only restores are rewritten, to `codex resume <uuid>`.
+
+An explicit choice from the user always wins in both cases: `--resume`,
+`--continue` or `--session-id` for Claude Code, and any subcommand for codex.
+They may be deliberately opening something else in that tab.
 
 `restoreOverrides` in Settings stays for tools that need a different command on
 restore, but is empty by default — a rewrite to `--continue` would now be
 *less* accurate than the id, and would override it.
 
-### Why this is done by rewriting the command, not by a shim
+### Commands you type yourself
 
-The first version put a `claude` wrapper on the session's PATH, which is how
-cmux does it. That does not survive a login shell: `.zshrc` rebuilds PATH after
-we set it, and a `~/.local/bin/claude` prepended there wins. Measured directly
-— `command -v claude` inside a spawned session resolved to the real binary, not
-the shim.
+Rewriting only covers commands Atrium runs. A `claude` typed by hand needs a
+wrapper on PATH, and the first attempt at that — prepending a shim directory
+when spawning the shell, which is how cmux does it — silently did nothing.
+A login shell sources the user's rc files *after* we set PATH, and those rebuild
+it. Measured rather than assumed: `command -v claude` inside a spawned session
+resolved to `~/.local/bin/claude`, not the shim.
 
-Rewriting the command Atrium types has no such problem. The shim is still
-installed, and still binds sessions on setups whose rc files leave PATH alone,
-but it is a fallback rather than the mechanism.
+The only placement that survives is after the user's own configuration has run,
+so Atrium hands zsh its own `ZDOTDIR`. Those startup files source the user's
+first and unchanged, then put the shim directory back at the front of PATH and
+hand `ZDOTDIR` back so anything launched later sees the real setup. This is the
+same trick editors use for shell integration.
 
-**The gap that remains:** a `claude` you type yourself in a tab is only bound
-if the shim wins PATH. Closing that properly means shell integration — pointing
-the shell at our own rc that sources the user's and then fixes PATH — which is
-what editors do and is a larger piece of work.
+Verified inside a real session: `claude` and `codex` both resolve to the shims,
+while `brew`, the user's 42 PATH entries, their aliases and `ZDOTDIR` are all
+intact. Shells other than zsh keep the plain PATH prefix, which works wherever
+rc files leave PATH alone.
 
 ## Replayed scrollback is not inert
 

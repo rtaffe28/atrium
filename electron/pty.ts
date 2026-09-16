@@ -1,6 +1,6 @@
 import { spawn, type IPty } from 'node-pty';
 import type { WebContents } from 'electron';
-import { shimDirectory } from './shims';
+import { shellStartup, shimDirectory } from './shims';
 
 export interface SpawnOptions {
   id: string;
@@ -45,17 +45,21 @@ export class PtyManager {
         ? process.env.COMSPEC ?? 'powershell.exe'
         : this.env.SHELL ?? '/bin/zsh');
 
-    // The shim directory goes first so `claude` resolves to our wrapper.
+    // The shim directory goes first so agent commands resolve to our wrappers.
+    // Shell integration then puts it back after the user's rc files have run,
+    // which is the only placement that actually survives a login shell.
     const shims = shimDirectory();
     const path = shims ? `${shims}:${this.env.PATH ?? ''}` : this.env.PATH;
+    const startup = shellStartup(shell);
 
-    const term = spawn(shell, options.args ?? [], {
+    const term = spawn(shell, [...(options.args ?? []), ...startup.args], {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd,
       env: {
         ...this.env,
+        ...startup.env,
         ...(options.env ?? {}),
         ...(path ? { PATH: path } : {}),
         TERM: 'xterm-256color',

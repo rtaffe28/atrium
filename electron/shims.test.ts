@@ -12,8 +12,10 @@ import { shimDirectory } from './shims';
  */
 const shims = shimDirectory()!;
 const fakeBin = mkdtempSync(join(tmpdir(), 'atrium-fakebin-'));
-writeFileSync(join(fakeBin, 'claude'), '#!/bin/bash\necho "claude $@"\n');
-chmodSync(join(fakeBin, 'claude'), 0o755);
+for (const name of ['claude', 'codex']) {
+  writeFileSync(join(fakeBin, name), `#!/bin/bash\necho "${name} $@"\n`);
+  chmodSync(join(fakeBin, name), 0o755);
+}
 
 const home = mkdtempSync(join(tmpdir(), 'atrium-fakehome-'));
 
@@ -22,8 +24,8 @@ afterAll(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-function runShim(args: string[], env: Record<string, string> = {}): string {
-  return execFileSync('/bin/bash', [join(shims, 'claude'), ...args], {
+function runShim(args: string[], env: Record<string, string> = {}, name = 'claude'): string {
+  return execFileSync('/bin/bash', [join(shims, name), ...args], {
     encoding: 'utf8',
     env: { PATH: `${shims}:${fakeBin}:/usr/bin:/bin`, HOME: home, ...env },
   }).trim();
@@ -79,5 +81,34 @@ describe('the claude shim', () => {
       message = String((error as { stderr?: string }).stderr ?? '');
     }
     expect(message).toContain('claude is not on PATH');
+  });
+});
+
+describe('the codex shim', () => {
+  const codex = (args: string[], env: Record<string, string> = {}) =>
+    runShim(args, env, 'codex');
+
+  it('passes straight through when no thread is known', () => {
+    expect(codex(['--model', 'gpt-5'])).toBe('codex --model gpt-5');
+  });
+
+  /**
+   * Codex cannot be told an id, so a fresh run is plain and only a restore —
+   * where Atrium has since observed the thread — becomes a resume.
+   */
+  it('resumes the thread this tab owns', () => {
+    expect(codex([], { ATRIUM_CODEX_SESSION: 'thread-9' })).toBe('codex resume thread-9');
+  });
+
+  it('keeps flags, which codex resume also accepts', () => {
+    expect(codex(['--dangerously-bypass-approvals-and-sandbox'], {
+      ATRIUM_CODEX_SESSION: 'thread-9',
+    })).toBe('codex resume thread-9 --dangerously-bypass-approvals-and-sandbox');
+  });
+
+  it('stays out of the way of a subcommand', () => {
+    for (const sub of ['resume', 'exec', 'login', 'apply']) {
+      expect(codex([sub], { ATRIUM_CODEX_SESSION: 'thread-9' })).toBe(`codex ${sub}`);
+    }
   });
 });
