@@ -70,11 +70,15 @@ export function BrowserView({ tab, onNavigate, focusUrlBar }: Props) {
           value={draft}
           spellCheck={false}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="localhost:5173"
+          placeholder="Enter a URL"
         />
         {loading && <span className="browser-spinner" aria-label="Loading" />}
       </form>
-      <HostSurface id={tab.id} url={tab.url} />
+      {tab.url ? (
+        <HostSurface id={tab.id} url={tab.url} />
+      ) : (
+        <div className="empty">Type a URL above.</div>
+      )}
     </div>
   );
 }

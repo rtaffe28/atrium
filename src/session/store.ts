@@ -296,10 +296,10 @@ export abstract class SessionStore implements SessionDriver {
 
   addTab(sessionId: string, groupId: string, kind: TabKind): Tab {
     const session = this.sessions.get(sessionId);
-    const tab =
-      kind === 'browser'
-        ? this.makeTab('browser', { title: 'New tab', url: 'http://localhost:5173/' })
-        : this.makeTab('terminal', { title: 'zsh' });
+    // A new browser tab opens blank, on its URL bar. Any default here is a
+    // guess at where you were going, and a wrong one costs a selection and a
+    // retype.
+    const tab = this.makeTab(kind);
 
     this.update(sessionId, (s) => ({
       ...s,
