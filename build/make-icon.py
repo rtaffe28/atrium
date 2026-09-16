@@ -9,7 +9,7 @@ Everything is generated from one set of parameters rather than drawn by hand,
 so the raster and vector marks cannot drift apart.
 """
 
-import zlib, struct, math, sys
+import zlib, struct, math, sys, os
 TAU = math.pi * 2
 
 # ── the shell, as one set of parameters used for both the raster icon and
@@ -57,6 +57,37 @@ MID  = (0x7a, 0xa2, 0xf7)
 OLD  = (0x24, 0x2e, 0x3d)
 CORE_C = (0x1c, 0x27, 0x39)
 
+# ── orientation ──────────────────────────────────────────────────────────
+#
+# The aperture is a single radial step in the outline: at one angle the
+# boundary drops by a whole growth factor, because that is where the outermost
+# whorl ends and the one beneath it is showing. Unrotated that step lands on
+# the +x axis, which cuts a flat horizontal line out to the edge of the mark
+# and leaves the lower-right quadrant empty — it reads as a bite taken out of
+# a ring rather than as a shell seen in section. Turning the whole shell puts
+# the aperture at the lower left, where the outline carries the eye around the
+# spiral instead of stopping it dead.
+#
+# Applied in three places, all through the two helpers below: _fit measures the
+# rotated outline, sample() turns canvas points back into shell space, and the
+# SVG projects through the same rotation, so the raster and vector marks cannot
+# drift apart.
+#
+# One angle for every variant. The aperture is the th = 0 discontinuity, which
+# is where it is because th is taken modulo a turn — not somewhere that moves
+# with TURNS — so the same rotation aims it the same way at every size.
+ROT = math.radians(145)
+
+def _rot(x, y):
+    """Shell space to canvas orientation."""
+    c, s = math.cos(ROT), math.sin(ROT)
+    return x * c - y * s, x * s + y * c
+
+def _unrot(x, y):
+    """Canvas orientation back to shell space."""
+    c, s = math.cos(ROT), math.sin(ROT)
+    return x * c + y * s, -x * s + y * c
+
 def _outer_radius(th):
     """Outer edge of the shell at angle th."""
     return A * math.exp(B * (th + TAU * TURNS))
@@ -72,8 +103,9 @@ def _fit():
     for i in range(2048):
         th = TAU * i / 2048
         r = _outer_radius(th)
-        xs.append(r * math.cos(th))
-        ys.append(r * math.sin(th))
+        x, y = _rot(r * math.cos(th), r * math.sin(th))
+        xs.append(x)
+        ys.append(y)
     x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
     scale = (BODY - 2 * PAD * BODY) / max(x1 - x0, y1 - y0)
     return scale, 0.5 - (x0 + x1) / 2 * scale, 0.5 - (y0 + y1) / 2 * scale
@@ -118,7 +150,7 @@ def rounded(x, y, x0, y0, x1, y1, r):
 
 def sample(nx, ny):
     """nx, ny in 0..1 on the canvas."""
-    dx, dy = (nx - OFF_X) / SCALE, (ny - OFF_Y) / SCALE
+    dx, dy = _unrot((nx - OFF_X) / SCALE, (ny - OFF_Y) / SCALE)
     r = math.hypot(dx, dy)
     if r < CORE:
         return CORE_C
@@ -180,6 +212,28 @@ def render_png(path, S=1024, SS=3):
         + chunk(b'IEND', b''))
     print('  png', path)
 
+def write_icns(path, iconset='build/icon.iconset'):
+    """Pack the iconset into an .icns.
+
+    `iconutil` is the canonical tool and is macOS-only, which left the mac
+    artwork frozen at whatever a mac last generated while every other target
+    moved on — exactly the kind of drift the single-source-of-truth parameters
+    above exist to prevent. The container is simple enough to write directly:
+    a magic, a total length, then type/length/payload records holding the PNGs
+    unmodified.
+    """
+    TYPES = [('icp4', 'icon_16x16.png'),    ('ic11', 'icon_16x16@2x.png'),
+             ('icp5', 'icon_32x32.png'),    ('ic12', 'icon_32x32@2x.png'),
+             ('ic07', 'icon_128x128.png'),  ('ic13', 'icon_128x128@2x.png'),
+             ('ic08', 'icon_256x256.png'),  ('ic14', 'icon_256x256@2x.png'),
+             ('ic09', 'icon_512x512.png'),  ('ic10', 'icon_512x512@2x.png')]
+    body = b''
+    for tag, name in TYPES:
+        data = open(os.path.join(iconset, name), 'rb').read()
+        body += tag.encode('ascii') + struct.pack('>I', len(data) + 8) + data
+    open(path, 'wb').write(b'icns' + struct.pack('>I', len(body) + 8) + body)
+    print('  icns', path)
+
 # ── vector, from the same numbers ────────────────────────────────────────
 def render_svg(path, U=32):
     hexc = lambda c: '#%02x%02x%02x' % c
@@ -187,7 +241,9 @@ def render_svg(path, U=32):
     bw = BODY * U
     parts = [f'<rect x="{(U-bw)/2:.2f}" y="{(U-bw)/2:.2f}" width="{bw:.2f}" '
              f'height="{bw:.2f}" rx="{bw*BODY_RADIUS:.2f}" fill="{hexc(BG)}"/>']
-    px = lambda x, y: ((x * SCALE + OFF_X) * U, (y * SCALE + OFF_Y) * U)
+    def px(x, y):
+        rx, ry = _rot(x, y)
+        return (rx * SCALE + OFF_X) * U, (ry * SCALE + OFF_Y) * U
     total = int(TURNS * PER_TURN)
     for i in range(total):
         phi0 = i * step + step * WALL_A
@@ -212,7 +268,6 @@ def render_svg(path, U=32):
     print('  svg', path)
 
 if __name__ == '__main__':
-    import os
     print('nautilus:')
     target = sys.argv[1] if len(sys.argv) > 1 else 'build/icon.png'
 
@@ -247,6 +302,8 @@ if __name__ == '__main__':
     for size, variant in LINUX_SIZES:
         use(variant)
         render_png(f'build/icons/{size}x{size}.png', S=size, SS=4 if size <= 64 else 3)
+
+    write_icns('build/icon.icns')
 
     use('large')
     render_png(target, S=1024, SS=3)

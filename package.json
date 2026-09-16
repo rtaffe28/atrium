@@ -19,7 +19,7 @@
     "dist": "npm run build && npm run electron:build && electron-builder --mac",
     "dist:dir": "npm run build && npm run electron:build && electron-builder --mac --dir",
     "install:app": "node scripts/install.mjs",
-    "icon": "python3 build/make-icon.py && { command -v iconutil >/dev/null && iconutil -c icns build/icon.iconset -o build/icon.icns || echo 'skipped .icns (iconutil is macOS-only)'; }",
+    "icon": "python3 build/make-icon.py",
     "dist:linux": "npm run build && npm run electron:build && electron-builder --linux"
   },
   "dependencies": {
