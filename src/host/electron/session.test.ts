@@ -229,6 +229,37 @@ describe('restoring a captured command', () => {
     driver.dispose();
   });
 
+  it('clears the screen between restored history and the new session', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', {
+      sessions: [
+        {
+          id: 's1', title: 'claude', cwd: '~', branch: 'main', createdAt: 1,
+          diff: { files: 0, added: 0, removed: 0 },
+          layout: { type: 'leaf', groupId: 'g1' },
+          groups: { g1: { id: 'g1', tabIds: ['t1'], activeTabId: 't1' } },
+          tabs: { t1: { id: 't1', kind: 'terminal', title: 'claude', command: 'claude' } },
+        },
+      ],
+      scrollback: { t1: 'output from last time' },
+    });
+
+    let replayed = '';
+    driver.attach('t1', (chunk) => {
+      replayed += chunk;
+    });
+
+    expect(replayed).toContain('output from last time');
+    // Home, then erase the viewport — but not ESC[3J, which would take the
+    // scrollback with it.
+    expect(replayed).toContain('\x1b[H\x1b[2J');
+    expect(replayed).not.toContain('\x1b[3J');
+    expect(replayed.indexOf('output'), 'history first, then the clear').toBeLessThan(
+      replayed.indexOf('\x1b[2J'),
+    );
+    driver.dispose();
+  });
+
   it('sanitises replayed scrollback so it cannot re-answer terminal queries', () => {
     const f = fakeBridge();
     const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh');

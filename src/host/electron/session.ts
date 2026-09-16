@@ -23,6 +23,17 @@ const SETTLE_MS = 1500;
 const POLL_MS = 2000;
 
 /**
+ * Home the cursor and clear the visible screen, between restored history and
+ * the session about to start on top of it.
+ *
+ * Deliberately not `ESC[3J`, which would erase the scrollback too, and
+ * deliberately not typing `clear` into the shell — that would land in shell
+ * history and appear as a command the user did not run. The old session stays
+ * scrollable above; the screen just does not open half-full of it.
+ */
+const CLEAR_VIEWPORT = '\x1b[H\x1b[2J';
+
+/**
  * How long the shell must be quiet before a restored command is typed.
  *
  * Writing on the first byte is too early: the first chunk is often a partial
@@ -212,7 +223,7 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   protected primeScrollback(tabId: string, history: string): void {
-    if (history) this.stream(tabId).buffer = history;
+    if (history) this.stream(tabId).buffer = `${history}${CLEAR_VIEWPORT}`;
   }
 
   scrollback(budget: number): Record<string, string> {

@@ -206,7 +206,8 @@ export class MockDriver extends SessionStore {
   }
 
   protected primeScrollback(tabId: string, history: string): void {
-    if (history) this.stream(tabId).buffer = history;
+    // Matches the real driver: restored history sits above a cleared screen.
+    if (history) this.stream(tabId).buffer = `${history}\x1b[H\x1b[2J`;
   }
 
   scrollback(budget: number): Record<string, string> {
