@@ -169,6 +169,13 @@ app.whenReady().then(async () => {
   const sessionState = (tabId: string) => path.join(sessionRoot, tabId.replace(/[^\w-]/g, ''));
 
   /**
+   * Where Claude keeps the transcripts for a directory: the path with every
+   * separator flattened to a hyphen, so /Users/ryan/git → -Users-ryan-git.
+   */
+  const claudeProjects = (cwd: string) =>
+    path.join(env.HOME ?? '', '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+
+  /**
    * Arm a tab to resume, once.
    *
    * Only Atrium restoring a tab means "reopen what was there". Running an agent
@@ -177,12 +184,24 @@ app.whenReady().then(async () => {
    */
   ipcMain.handle(
     'agent:prepare-session',
-    async (_e, tabId: string, resume: { claude?: string; codex?: string }) => {
+    async (_e, tabId: string, resume: { claude?: string; codex?: string }, cwd?: string) => {
       const dir = sessionState(tabId);
       await mkdir(dir, { recursive: true }).catch(() => {});
       await rm(path.join(dir, 'resume'), { force: true }).catch(() => {});
       await rm(path.join(dir, 'resume-codex'), { force: true }).catch(() => {});
-      if (resume.claude) await writeFile(path.join(dir, 'resume'), resume.claude, 'utf8');
+      // Arming a conversation that does not exist is worse than not arming one:
+      // `claude --resume` fails outright, where an unarmed tab merely starts
+      // fresh. A tab can hold an id nothing was ever written under — one
+      // handed out for a session where nothing was said, or left behind by an
+      // agent that never started.
+      const transcript = resume.claude
+        ? await stat(path.join(claudeProjects(cwd ?? ''), `${resume.claude}.jsonl`)).catch(
+            () => null,
+          )
+        : null;
+      if (resume.claude && (!cwd || transcript)) {
+        await writeFile(path.join(dir, 'resume'), resume.claude, 'utf8');
+      }
       if (resume.codex) await writeFile(path.join(dir, 'resume-codex'), resume.codex, 'utf8');
       return dir;
     },
@@ -192,6 +211,30 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:current-session', async (_e, tabId: string) => {
     const file = path.join(sessionState(tabId), 'current');
     return (await readFile(file, 'utf8').catch(() => '')).trim() || null;
+  });
+
+  /**
+   * Which conversation Claude is writing to in this directory.
+   *
+   * The shim records the id it hands out, and an explicit `--resume <id>`.
+   * It cannot see the other two ways to change conversation: `claude --resume`
+   * with no id opens a picker, and `/resume` switches inside a process that
+   * has already started. Claude's own transcripts do show it — the live
+   * conversation is the file being appended to.
+   */
+  ipcMain.handle('agent:newest-claude-session', async (_e, cwd: string, since: number) => {
+    const dir = claudeProjects(cwd);
+    const uuid = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+    let best: { id: string; at: number } | null = null;
+
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      const match = uuid.exec(entry.name);
+      if (!match || !entry.isFile()) continue;
+      const info = await stat(path.join(dir, entry.name)).catch(() => null);
+      if (!info || info.mtimeMs < since) continue;
+      if (!best || info.mtimeMs > best.at) best = { id: match[1], at: info.mtimeMs };
+    }
+    return best?.id ?? null;
   });
 
   ipcMain.handle('agent:newest-codex-session', async (_e, since: number) => {

@@ -5,6 +5,7 @@ import type { AtriumBridge } from './bridge';
 /** A bridge that records calls and lets a test decide what is running. */
 function fakeBridge() {
   let foreground: Record<string, string> = {};
+  let liveClaudeSession: string | null = null;
   const spawned: Array<{ id: string; cwd: string }> = [];
   const written: Array<{ id: string; data: string }> = [];
   let onData: ((id: string, data: string) => void) | null = null;
@@ -32,6 +33,7 @@ function fakeBridge() {
       prepareSession: vi.fn(async () => '/tmp/state'),
       currentSession: vi.fn(async () => null),
       newestCodexSession: vi.fn(async () => null),
+      newestClaudeSession: vi.fn(async () => liveClaudeSession),
     },
     notify: { post: vi.fn() },
     workspace: { load: vi.fn(), save: vi.fn() },
@@ -45,6 +47,9 @@ function fakeBridge() {
     emit: (id: string, data: string) => onData?.(id, data),
     setForeground: (f: Record<string, string>) => {
       foreground = f;
+    },
+    setLiveClaudeSession: (id: string | null) => {
+      liveClaudeSession = id;
     },
   };
 }
@@ -123,6 +128,69 @@ describe('what a tab is running, as reported by the shell', () => {
 
     f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
     expect(driver.list()[0]).toBe(before);
+    driver.dispose();
+  });
+
+  /**
+   * Claude files a conversation under the directory it ran in, so a tab that
+   * comes back somewhere else cannot resume it however good the id is.
+   */
+  it('reopens a tab where it was, not where the session was opened', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const saved = driver.snapshot();
+    const tabId = Object.keys(saved[0].tabs)[0];
+    saved[0].cwd = '/Users/ryan';
+    saved[0].tabs[tabId].cwd = '/Users/ryan/git/atrium';
+
+    for (const session of driver.list()) driver.killSession(session.id);
+    f.spawned.length = 0;
+    driver.hydrate(saved, {});
+
+    expect(f.spawned.find((s) => s.id === tabId)?.cwd).toBe('/Users/ryan/git/atrium');
+    driver.dispose();
+  });
+
+  /**
+   * `claude --resume` with no id opens a picker, and `/resume` switches inside
+   * a running process. Neither reaches the shim, so a tab that only trusted
+   * the shim kept arming the conversation you had left behind.
+   */
+  it('follows the user into a conversation they resumed themselves', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+
+    f.emit(tabId, osc('633;E;claude --resume'));
+    f.setForeground({ [tabId]: '2.1.273' });
+    f.setLiveClaudeSession('62501422-cc78-44a5-87cb-00f03cf9df28');
+    await driver.refreshCommands();
+
+    expect(driver.list()[0].tabs[tabId].agentSessionId).toBe(
+      '62501422-cc78-44a5-87cb-00f03cf9df28',
+    );
+    driver.dispose();
+  });
+
+  /** Two tabs in one directory; the transcripts cannot say which is which. */
+  it('does not take a conversation another tab already holds', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const session = driver.list()[0];
+    const held = Object.keys(session.tabs)[0];
+    const groupId = Object.keys(session.groups)[0];
+    const other = driver.addTab(session.id, groupId, 'terminal').id;
+
+    for (const tabId of [held, other]) f.emit(tabId, osc('633;E;claude'));
+    f.setForeground({ [held]: '2.1.273', [other]: '2.1.273' });
+
+    f.setLiveClaudeSession('62501422-cc78-44a5-87cb-00f03cf9df28');
+    await driver.refreshCommands();
+    const claimed = driver.list()[0].tabs[held].agentSessionId;
+    expect(claimed, 'the first tab to see it binds to it').toBe(
+      '62501422-cc78-44a5-87cb-00f03cf9df28',
+    );
+    expect(driver.list()[0].tabs[other].agentSessionId).not.toBe(claimed);
     driver.dispose();
   });
 

@@ -60,11 +60,14 @@ const bridge = {
     prepareSession: (
       tabId: string,
       resume: { claude?: string; codex?: string },
-    ): Promise<string> => ipcRenderer.invoke('agent:prepare-session', tabId, resume),
+      cwd?: string,
+    ): Promise<string> => ipcRenderer.invoke('agent:prepare-session', tabId, resume, cwd),
     currentSession: (tabId: string): Promise<string | null> =>
       ipcRenderer.invoke('agent:current-session', tabId),
     newestCodexSession: (since: number): Promise<string | null> =>
       ipcRenderer.invoke('agent:newest-codex-session', since),
+    newestClaudeSession: (cwd: string, since: number): Promise<string | null> =>
+      ipcRenderer.invoke('agent:newest-claude-session', cwd, since),
   },
 
   files: {

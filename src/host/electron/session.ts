@@ -209,6 +209,15 @@ export class ElectronSessionDriver extends SessionStore {
             .catch(() => {});
         }
 
+        // Claude renames its own process, so what it is cannot be read off the
+        // foreground; what the tab was told to run is the reliable answer.
+        if ((tab.command ?? tab.agent ?? '').trim().split(/\s+/)[0] === 'claude') {
+          void this.bridge.agent
+            .newestClaudeSession(tab.cwd ?? session.cwd, this.spawnedAt.get(tab.id) ?? 0)
+            .then((agentSessionId) => this.adoptConversation(tab.id, agentSessionId))
+            .catch(() => {});
+        }
+
         if (running !== 'codex' || tab.codexSessionId) continue;
 
         // Codex writes its thread id only after it starts, so this is the
@@ -382,6 +391,31 @@ export class ElectronSessionDriver extends SessionStore {
     return reported;
   }
 
+  /**
+   * Bind a tab to the conversation Claude is actually writing to.
+   *
+   * Two tabs can be running in one directory, and the transcripts alone cannot
+   * say which is which — so a conversation another tab already holds is left
+   * alone. That tab claimed it while it was the one being written to, which is
+   * the better evidence of the two.
+   */
+  private adoptConversation(tabId: string, agentSessionId: string | null): void {
+    if (!agentSessionId) return;
+    const session = this.sessionOfTab(tabId);
+    if (!session || session.tabs[tabId]?.agentSessionId === agentSessionId) return;
+
+    for (const other of this.list()) {
+      for (const tab of Object.values(other.tabs)) {
+        if (tab.id !== tabId && tab.agentSessionId === agentSessionId) return;
+      }
+    }
+
+    this.update(session.id, (s) => ({
+      ...s,
+      tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentSessionId } },
+    }));
+  }
+
   private setAgentState(tabId: string, state: AgentState | undefined) {
     const session = this.sessionOfTab(tabId);
     if (!session || session.tabs[tabId]?.agentState === state) return;
@@ -407,6 +441,7 @@ export class ElectronSessionDriver extends SessionStore {
     void this.bridge.agent.prepareSession(
       tabId,
       restoring ? { claude: tab?.agentSessionId, codex: tab?.codexSessionId } : {},
+      cwd.startsWith('~') ? cwd.replace('~', this.home) : cwd,
     );
 
     // Always spawn the shell, then type the command into it. Replacing the
