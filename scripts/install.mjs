@@ -88,9 +88,16 @@ function installLinux() {
   try {
     // apt rather than dpkg: it resolves the runtime dependencies fpm recorded,
     // where dpkg would leave the package half-configured and say so cryptically.
-    run('sudo', ['apt-get', 'install', '-y', `./${deb}`]);
+    //
+    // --reinstall because the version rarely changes between local builds, and
+    // without it apt decides the newest version is already installed and does
+    // nothing — reporting success, which is the worst of both. You then test
+    // the previous build and believe you are testing this one.
+    run('sudo', ['apt-get', 'install', '-y', '--reinstall', `./${deb}`]);
   } catch {
-    console.error(`\n✗ install failed. To do it by hand:\n  sudo apt-get install ./${deb}`);
+    console.error(
+      `\n✗ install failed. To do it by hand:\n  sudo apt-get install --reinstall ./${deb}`,
+    );
     process.exit(1);
   }
 
