@@ -146,15 +146,6 @@ kbd {
   color: var(--text-faint);
 }
 
-.badge {
-  background: var(--yellow);
-  color: #1a1206;
-  border-radius: 999px;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
 
 .icon-button {
   width: 22px;

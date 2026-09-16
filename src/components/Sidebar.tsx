@@ -43,7 +43,6 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
   );
 
   const railActive = action?.kind === 'rail';
-  const needsAttention = sessions.filter((s) => deriveSessionState(s) === 'waiting').length;
 
   // Double-clicking blank rail space opens a session — the same gesture as the
   // empty workspace. Guarded so a double-click on a row is still just a
@@ -60,14 +59,7 @@ export function Sidebar({ sessions, activeId, onSelect, onCreate, onKill }: Prop
       onDoubleClick={onBackgroundDoubleClick}
     >
       <header className="sidebar-head">
-        <div className="sidebar-title">
-          Sessions
-          {needsAttention > 0 && (
-            <span className="badge" title={`${needsAttention} waiting on you`}>
-              {needsAttention}
-            </span>
-          )}
-        </div>
+        <div className="sidebar-title">Sessions</div>
         <button className="icon-button" onClick={onCreate} title="New session (⌘N)">
           +
         </button>
