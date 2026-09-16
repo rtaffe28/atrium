@@ -57,4 +57,16 @@ nsis:
 linux:
   target: [AppImage, deb]
   category: Development
-  icon: build/icon.png
+  # A directory of exact sizes, not the 1024 master. Given one large PNG,
+  # electron-builder installs it at that size and nothing else — and no menu
+  # or task switcher looks in hicolor/1024x1024, so the app shows up with a
+  # blank icon. `npm run icon` writes these.
+  icon: build/icons
+  # fpm refuses to build a .deb without a maintainer.
+  maintainer: Ryan Taffe <ryan@phave.com>
+  # Wayland matches a window to its .desktop entry by app_id. Without a name
+  # that matches, the running window is not linked to the launcher and the
+  # task switcher falls back to a generic icon even once the theme icons are
+  # installed. The name itself comes from `desktopName` in package.json.
+  syncDesktopName: true
+  synopsis: Run several coding agents in parallel

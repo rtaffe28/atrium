@@ -19,7 +19,8 @@
     "dist": "npm run build && npm run electron:build && electron-builder --mac",
     "dist:dir": "npm run build && npm run electron:build && electron-builder --mac --dir",
     "install:app": "node scripts/install.mjs",
-    "icon": "python3 build/make-icon.py && iconutil -c icns build/icon.iconset -o build/icon.icns"
+    "icon": "python3 build/make-icon.py && { command -v iconutil >/dev/null && iconutil -c icns build/icon.iconset -o build/icon.icns || echo 'skipped .icns (iconutil is macOS-only)'; }",
+    "dist:linux": "npm run build && npm run electron:build && electron-builder --linux"
   },
   "dependencies": {
     "node-pty": "^1.1.0"
@@ -47,6 +48,7 @@
   },
   "main": "dist-electron/main.mjs",
   "description": "A desktop workspace for running several coding agents in parallel",
+  "desktopName": "atrium.desktop",
   "author": {
     "name": "Ryan Taffe"
   }

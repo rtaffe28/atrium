@@ -234,6 +234,20 @@ if __name__ == '__main__':
         for extra in NAMES[size][1:]:
             open('build/icon.iconset/' + extra, 'wb').write(open(first, 'rb').read())
 
+    # Linux reads a directory of exact sizes out of the hicolor theme rather
+    # than one master PNG. electron-builder installs whatever sizes it finds
+    # here and nothing else, so a lone 1024 master installs only a 1024 icon —
+    # which menus and task switchers do not look for, and the app appears with
+    # no icon at all. Same artwork policy as the .iconset: densest variant that
+    # still reads at that size.
+    LINUX_SIZES = [(16, 'small'), (24, 'small'), (32, 'small'), (48, 'medium'),
+                   (64, 'medium'), (128, 'medium'), (256, 'large'),
+                   (512, 'large'), (1024, 'large')]
+    os.makedirs('build/icons', exist_ok=True)
+    for size, variant in LINUX_SIZES:
+        use(variant)
+        render_png(f'build/icons/{size}x{size}.png', S=size, SS=4 if size <= 64 else 3)
+
     use('large')
     render_png(target, S=1024, SS=3)
     use('medium')
