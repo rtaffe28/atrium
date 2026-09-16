@@ -74,6 +74,9 @@ function Workspace() {
    * mean any later remount — a split, a tab move — silently honours it again
    * and the cursor jumps.
    */
+  // eslint-disable-next-line react/set-state-in-effect -- the effect IS the
+  // mechanism: this consumes a one-shot signal after the children that act on
+  // it have run, which is precisely what an effect is for.
   useEffect(() => {
     if (focusTabId) setFocusTabId(null);
   }, [focusTabId]);
