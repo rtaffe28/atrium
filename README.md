@@ -14,6 +14,9 @@ npm run dev       # design loop in a browser tab, MockHost
 npm run electron  # the real app: real PTYs, needs `npm run dev` running
 npm test          # 51 tests
 npm run pty:clean # see a raw pseudo-terminal work, nothing else in the way
+
+npm run install:app  # build and install into /Applications
+npm run dist         # .dmg + .zip into release/
 ```
 
 `npm run electron` expects the dev server on :5173. For a standalone build,
@@ -72,3 +75,4 @@ docs/plan/      overview, terminal primer, decisions, architecture, roadmap,
 6. [`docs/plan/05-ui-model.md`](docs/plan/05-ui-model.md) — sessions, panes, tabs, drag, notifications
 7. [`docs/plan/06-host-interface.md`](docs/plan/06-host-interface.md) — the cross-platform host seam
 8. [`docs/plan/07-persistence.md`](docs/plan/07-persistence.md) — restore, and what it cannot do
+9. [`docs/plan/08-packaging.md`](docs/plan/08-packaging.md) — bundling, installing, signing

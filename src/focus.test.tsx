@@ -11,14 +11,34 @@ describe('keyboard focus follows the session you enter', () => {
   beforeEach(clearFocus);
   afterEach(cleanup);
 
-  /**
-   * The guard that makes the rest safe. Focusing whenever a terminal mounts
-   * would yank the cursor on every launch, every restore and every split —
-   * worse than the problem it solves.
-   */
-  it('does not grab focus just from rendering', () => {
+  it('focuses the terminal when the app opens', () => {
     render(<App />);
-    expect(focused(), 'mounting must not steal the cursor').toBe(false);
+    expect(focused(), 'the app should open ready to type').toBe(true);
+  });
+
+  /**
+   * The guard that keeps the rest safe. Opening takes focus once; after that,
+   * a terminal mounting must not. Splitting a pane remounts terminals, and
+   * having the cursor jump on every split would be worse than the problem
+   * focusing solves.
+   */
+  it('does not grab focus again when a split remounts terminals', () => {
+    render(<App />);
+    act(() => {
+      fireEvent.click(screen.getByText('Auth flow migration').closest('.session-row')!);
+    });
+    clearFocus();
+
+    const tabs = [...document.querySelectorAll('[data-tab-id]')];
+    act(() => {
+      fireEvent.pointerDown(tabs[1], { clientX: 700, clientY: 50, button: 0 });
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 700, clientY: 400 }));
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 1400, clientY: 500 }));
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 1400, clientY: 500 }));
+    });
+
+    expect(document.querySelectorAll('.pane')).toHaveLength(2);
+    expect(focused(), 'splitting must not move the cursor').toBe(false);
   });
 
   it('focuses the terminal of a session you create', () => {

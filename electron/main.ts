@@ -53,6 +53,15 @@ function createWindow() {
   });
 
   window.once('ready-to-show', () => window.show());
+
+  // A packaged app whose renderer fails to load shows a blank window and says
+  // nothing at all. These two turned a silent failure into a one-line answer.
+  window.webContents.on('did-fail-load', (_event, code, description, url) =>
+    console.error('[atrium] renderer failed to load', code, description, url),
+  );
+  window.webContents.on('preload-error', (_event, preloadPath, error) =>
+    console.error('[atrium] preload error', preloadPath, error),
+  );
   window.webContents.on('preload-error', (_e, p, error) =>
     console.error('[atrium] PRELOAD ERROR', p, error),
   );

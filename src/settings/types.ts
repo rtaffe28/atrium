@@ -28,6 +28,16 @@ export interface Settings {
    */
   defaultCommand: string;
   /**
+   * Where a new session opens.
+   *
+   * This matters more than it looks. Opening every session in the home
+   * directory makes an agent ask permission for your entire home folder, and
+   * makes `--continue` resume whatever last ran there rather than the
+   * conversation for the thing you are working on. A project directory is
+   * trusted once and keeps its own history.
+   */
+  defaultCwd: string;
+  /**
    * How a captured command is rewritten when a session is restored, one
    * `command = replacement` per line.
    *
@@ -44,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyOn: { waiting: true, done: true, error: true },
   terminalFontSize: 13,
   defaultCommand: 'claude',
+  defaultCwd: '~',
   restoreOverrides: 'claude = claude --continue',
 };
 

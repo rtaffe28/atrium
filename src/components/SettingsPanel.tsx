@@ -72,6 +72,23 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <h3>New sessions</h3>
           <label className="setting-row">
             <span className="setting-text">
+              <span className="setting-label">Working directory</span>
+              <span className="setting-hint">
+                Where new sessions open. A project directory rather than your
+                home folder: an agent asks permission per directory, and
+                resumes the conversation belonging to it.
+              </span>
+            </span>
+            <input
+              className="setting-input"
+              value={settings.defaultCwd}
+              spellCheck={false}
+              placeholder="~/git/atrium"
+              onChange={(event) => update({ defaultCwd: event.target.value })}
+            />
+          </label>
+          <label className="setting-row">
+            <span className="setting-text">
               <span className="setting-label">Default command</span>
               <span className="setting-hint">
                 Runs when a session opens. Leave blank for a plain shell.

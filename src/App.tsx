@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DragProvider } from './dnd/DragProvider';
 import type { DragPayload } from './dnd/context';
 import { HostProvider } from './host/HostProvider';
@@ -46,10 +46,38 @@ function Workspace() {
 
   useEffect(() => driver.subscribe(setSessions), [driver]);
 
+  /**
+   * Put the cursor in the terminal when the app opens.
+   *
+   * Once, on the first workspace to arrive — not on every mount, which would
+   * yank focus on every split and every re-render.
+   */
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (openedRef.current || sessions.length === 0) return;
+    openedRef.current = true;
+    const first = sessions[0];
+    const group = first.groups[Object.keys(first.groups)[0]];
+    setActiveGroupId(group?.id ?? null);
+    setFocusTabId(group?.activeTabId ?? null);
+  }, [sessions]);
+
   useAgentNotifications(sessions);
 
   // activeId is only a preference. Resolving it during render means a killed
   // session falls back to the next one without an effect round-trip.
+  /**
+   * A focus request is consumed once and then cleared.
+   *
+   * React runs child effects before parent ones, so the terminal has already
+   * taken focus by the time this fires. Leaving the request set instead would
+   * mean any later remount — a split, a tab move — silently honours it again
+   * and the cursor jumps.
+   */
+  useEffect(() => {
+    if (focusTabId) setFocusTabId(null);
+  }, [focusTabId]);
+
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0] ?? null;
 
   // Where a new tab lands: the pane you last touched, falling back to the
@@ -71,7 +99,7 @@ function Workspace() {
   const createSession = useCallback(() => {
     const created = driver.createSession({
       title: settings.defaultCommand.trim() || 'Shell',
-      cwd: '~',
+      cwd: settings.defaultCwd.trim() || '~',
       branch: 'main',
       command: settings.defaultCommand,
     });
@@ -80,7 +108,7 @@ function Workspace() {
     // Land in the new terminal ready to type, rather than on the button that
     // opened it.
     setFocusTabId(Object.keys(created.tabs)[0] ?? null);
-  }, [driver, settings.defaultCommand]);
+  }, [driver, settings.defaultCommand, settings.defaultCwd]);
 
   /** Entering an existing session should also put the cursor in its terminal. */
   const selectSession = useCallback(

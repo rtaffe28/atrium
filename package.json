@@ -1,7 +1,7 @@
 {
   "name": "atrium",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,10 @@
     "electron:prod": "npm run build && npm run electron:build && electron .",
     "postinstall": "node scripts/fix-spawn-helper.mjs",
     "pty": "node experiments/pty/hello-pty.mjs",
-    "pty:clean": "node experiments/pty/hello-pty.mjs --clean"
+    "pty:clean": "node experiments/pty/hello-pty.mjs --clean",
+    "dist": "npm run build && npm run electron:build && electron-builder --mac",
+    "dist:dir": "npm run build && npm run electron:build && electron-builder --mac --dir",
+    "install:app": "node scripts/install.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -33,6 +36,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "electron": "^44.4.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "jsdom": "^29.1.1",
     "oxlint": "^1.81.0",
@@ -40,5 +44,9 @@
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
   },
-  "main": "dist-electron/main.mjs"
+  "main": "dist-electron/main.mjs",
+  "description": "A desktop workspace for running several coding agents in parallel",
+  "author": {
+    "name": "Ryan Taffe"
+  }
 }
