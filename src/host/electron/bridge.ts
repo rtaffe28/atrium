@@ -40,8 +40,12 @@ export interface AtriumBridge {
     onExit(handler: (id: string, code: number) => void): () => void;
   };
   agent: {
-    prepareSession(tabId: string, resume: { claude?: string; codex?: string }): Promise<string>;
-    currentSession(tabId: string): Promise<string | null>;
+    prepareSession(
+      tabId: string,
+      resume: { claude?: string; codex?: string },
+      cwd?: string,
+    ): Promise<string>;
+    report(tabId: string): Promise<{ sessionId: string | null; status: string | null }>;
     newestCodexSession(since: number): Promise<string | null>;
   };
   files: {

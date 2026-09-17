@@ -51,6 +51,13 @@ export interface Tab {
   codexSessionId?: string;
   /** Terminal tabs running an agent. Drives the rail and notifications. */
   agentState?: AgentState;
+  /**
+   * Where this terminal is now, as the shell reports it on every prompt.
+   *
+   * The session's own cwd is where it was opened, which stops being true the
+   * first time you cd. A new session inherits from here.
+   */
+  cwd?: string;
   /** Browser tabs only. */
   url?: string;
 }

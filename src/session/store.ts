@@ -180,7 +180,9 @@ export abstract class SessionStore implements SessionDriver {
         // What was actually running wins over what the tab was created as.
         // `restoring` is the only case that should reopen a past conversation;
         // running an agent again by hand starts a new one.
-        this.openTerminal(tab.id, session.cwd, tab.command ?? tab.agent, true);
+        // The tab's own directory first: an agent's conversation is filed under
+        // the directory it ran in, so reopening the tab anywhere else loses it.
+        this.openTerminal(tab.id, tab.cwd ?? session.cwd, tab.command ?? tab.agent, true);
       }
     }
   }

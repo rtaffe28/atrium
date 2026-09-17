@@ -1,14 +1,16 @@
 # Agent state: what a tab knows, and how well
 
-**Status: on, and only partly trustworthy.** Two of the four states are
-reported by something that knows. The other two are inferred from output
-timing, which is weaker than it looks and is the last significant guess left in
-the app.
+**Status: reported, for Claude tabs.** Claude Code's lifecycle hooks fire back
+into Atrium, so a tab running Claude knows what its agent is doing and which
+conversation it is on because the agent said so. The inference below is still
+there, and still what a codex tab or a plain command falls back to — but for a
+tab that reports, it is switched off entirely rather than blended with.
 
 ## Where each state comes from
 
 | State | Source | How good |
 |---|---|---|
+| any | Claude lifecycle hook | A report, from the process that knows. Supersedes everything below for that tab. |
 | `waiting` | BEL in the stream | A fact. Ringing is deliberate — a program that rings is asking for a human. |
 | `done` / `error` | OSC `133;D;n` | A fact. The shell announcing that the command exited, with its status. |
 | `working` | bytes are arriving | A guess. |
@@ -53,38 +55,88 @@ problem is not which bytes are excluded. It is that the presence of output does
 not carry the information being asked of it, so any answer derived from it is a
 coincidence that holds until it does not.
 
-## What would fix it properly
-
-**Agent hooks.** [`09-borrowed-ideas.md`](09-borrowed-ideas.md) already names
-this the highest-value item on the list, and this is the argument for it. cmux
-injects `--settings` into the agent so Claude Code's hooks fire back into the
-app with real status. That is a report, from the only process that knows: the
-agent says it started working, the agent says it is done, and no amount of
-screen redrawing changes either.
+## What fixes it: asking the agent
 
 It is the same move that shell integration made for command lines. A tab once
 recorded `2.1.273` as its command, from the foreground process name, because a
 process that renames itself will lie to anyone who infers rather than asks.
-Asking ended that class of bug. Asking would end this one.
+Asking ended that class of bug. Asking ends this one.
 
-## If it has to be switched off first
+The shim hands `claude` a `--settings` file registering five hooks, each
+pointing at `electron/shell/hook.sh`:
 
-Removing the inferred half is a small change and leaves a coherent app: a tab
-reports `waiting` when the agent rings and `done`/`error` when the command
-exits, and says nothing in between. It was disabled once, briefly, before being
-restored so the echo fix could actually be tried on a working build.
+| Hook | Writes | Means |
+|---|---|---|
+| `SessionStart` | `current` | this is the conversation, however it began |
+| `UserPromptSubmit` | `status` = `working` | a turn has started |
+| `Stop` | `status` = `done` | the turn is over |
+| `Notification` | `status` = `waiting` | the agent is asking for something |
+| `SessionEnd` | removes `status` | there is no agent here any more |
 
-The cost of switching it off is real — no "finished" notification for an agent
-that completes a turn without exiting, which for a long-lived agent CLI is
-every turn. Whether that is worse than a status that is sometimes confidently
-wrong depends on how often the flicker is actually seen, which is the thing to
-measure before deciding.
+Every hook runs inside the agent's own process tree, so `ATRIUM_SESSION_STATE`
+— exported into the tab's shell before anything starts — already says which tab
+it is. No pid resolution, no directory matching, nothing to get wrong. The
+files land in the directory the renderer already polls every two seconds, so
+there is no socket and no daemon.
+
+`--settings` adds a layer rather than replacing one, so the user's own hooks
+still run; Claude concatenates the arrays. If the user passes their own
+`--settings` the shim stands aside entirely, because ours would replace theirs
+and a flag that silently stops working is worse than a tab that reports
+nothing.
+
+### What this also fixed
+
+`SessionStart` fires for a conversation **however it began** — new, `--resume`,
+`--continue`, the picker, or `/resume` inside a session already running. That
+last set is precisely what a wrapper around the command line cannot see, and
+not seeing it was a real bug: resuming a conversation by hand left the tab
+still bound to the one before it, and restore reopened the wrong one.
+
+The workaround for that — scanning `~/.claude/projects/<cwd>/` for the
+transcript being appended to — is **deleted**. It was inference, it could bind
+the wrong conversation when two tabs shared a directory, and the hook answers
+the same question exactly. Two answers to one question is how the rail came to
+flicker in the first place.
+
+### What cmux does
+
+The same thing, with a bigger machine around it. Its wrapper
+(`Resources/bin/cmux-claude-wrapper`, ~1,800 lines of bash) registers
+`SessionStart`, `Stop`, `SessionEnd`, `Notification`, `UserPromptSubmit`,
+`SubagentStop` and `PreToolUse` against its own Swift CLI, which talks to the
+app over a unix socket. It resolves *which pane* a hook came from by exporting
+`CMUX_CLAUDE_PID=$$` before `exec`, then mapping pid → controlling tty → pane;
+our per-tab state directory makes that step unnecessary. It also repoints
+`CLAUDE_CONFIG_DIR` on an explicit resume so a foreign config dir cannot turn a
+valid resume into "No conversation found" — worth remembering if Atrium ever
+sets that variable, which it does not.
+
+cmux is proprietary, so this was read for the idea and written fresh. The hook
+protocol itself is Claude Code's public interface and owes it nothing.
+
+## What is still inferred
+
+Codex, and anything else run by hand. Codex has no hook mechanism of this kind,
+so a codex tab still gets the output-timing guess and the flicker that comes
+with it. The question there is whether to keep inferring or to report nothing
+between the bell and the exit — which is the trade the section above used to
+frame, and is now a question about one agent rather than all of them.
+
+The inference is not dead code for another reason: a tab only stops guessing
+once its agent has actually reported. A Claude tab that has not said anything
+yet, or one running through a shell Atrium could not hook, still falls back.
 
 ## Where it lives
 
-- `src/host/electron/session.ts` — `receive()` holds the inference and its two
-  exemptions; `applyShellEvents()` handles the reported exit and tells
-  `receive()` that it did.
+- `electron/shell/hook.sh` — the hook itself; `electron/shims.ts` generates the
+  settings that register it, and `electron/shell/claude.sh` passes them on.
+- `electron/main.ts` — `agent:report`, one read of what a tab's agent has said.
+- `src/host/electron/session.ts` — `applyReport()` takes the agent at its word
+  and adds the tab to `reporting`, which is what `receive()` checks before
+  inferring anything; `receive()` holds the inference and its two exemptions;
+  `applyShellEvents()` handles the reported exit and tells `receive()` that it
+  did.
 - `src/session/bell.ts` — a real bell against an OSC terminator.
 - `src/session/shellEvents.ts` — the OSC 633/133 scanner.
 - `src/notifications.ts` — the policy for which transitions interrupt a human.

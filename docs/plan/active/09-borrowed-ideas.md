@@ -30,16 +30,15 @@ HISTFILE from it. Ours held onto it and was quietly writing the user's shell
 history into a temp directory. Reading someone else's solution found a bug that
 testing had not.
 
-## Worth taking next
+**Agent hooks, for state that is reported rather than inferred (cmux).** Taken.
+The shim hands `claude` a `--settings` file registering its lifecycle hooks, so
+a tab hears what its agent is doing, and which conversation it is on, from the
+agent. It replaced the last significant guess in the app and a heuristic that
+had already been wrong in a way that made the rail flicker — and it turned out
+to answer a second question too, since `SessionStart` fires for a conversation
+however it began. See [`12-agent-state.md`](12-agent-state.md).
 
-**Agent hooks, for state that is reported rather than inferred (cmux).** Its
-wrapper also injects `--settings`, so Claude Code's hooks fire back into the
-app with real status. Atrium currently infers agent state from the byte stream:
-a bell means "needs you", output means "working", quiet means "done". That is a
-heuristic, and it has already been wrong once in a way that made the rail
-flicker. Hooks would make it a fact, exactly as shell integration did for
-commands. **This is the highest-value item on the list**, because it is the
-last significant guess left.
+## Worth taking next
 
 **Command navigation and re-run (VS Code).** The OSC 133 marks are already
 arriving and are currently only used for state. The same marks give jump to

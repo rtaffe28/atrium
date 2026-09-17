@@ -25,6 +25,19 @@ describe('reading shell integration events', () => {
     expect(scanShellEvents(osc('133;A'), newShellEventScan())).toEqual([{ type: 'prompt' }]);
   });
 
+  it('reports where the shell is, so a new session can start there', () => {
+    expect(scanShellEvents(osc('633;P;Cwd=/Users/ryan/git/atrium'), newShellEventScan())).toEqual([
+      { type: 'cwd', cwd: '/Users/ryan/git/atrium' },
+    ]);
+  });
+
+  it('keeps a path containing semicolons intact, and ignores other properties', () => {
+    expect(scanShellEvents(osc('633;P;Cwd=/tmp/a;b'), newShellEventScan())).toEqual([
+      { type: 'cwd', cwd: '/tmp/a;b' },
+    ]);
+    expect(scanShellEvents(osc('633;P;IsWindows=False'), newShellEventScan())).toEqual([]);
+  });
+
   it('keeps a command line containing semicolons intact', () => {
     expect(scanShellEvents(osc('633;E;a; b; c'), newShellEventScan())).toEqual([
       { type: 'started', command: 'a; b; c' },

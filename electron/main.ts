@@ -169,6 +169,13 @@ app.whenReady().then(async () => {
   const sessionState = (tabId: string) => path.join(sessionRoot, tabId.replace(/[^\w-]/g, ''));
 
   /**
+   * Where Claude keeps the transcripts for a directory: the path with every
+   * separator flattened to a hyphen, so /Users/ryan/git → -Users-ryan-git.
+   */
+  const claudeProjects = (cwd: string) =>
+    path.join(env.HOME ?? '', '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+
+  /**
    * Arm a tab to resume, once.
    *
    * Only Atrium restoring a tab means "reopen what was there". Running an agent
@@ -177,21 +184,42 @@ app.whenReady().then(async () => {
    */
   ipcMain.handle(
     'agent:prepare-session',
-    async (_e, tabId: string, resume: { claude?: string; codex?: string }) => {
+    async (_e, tabId: string, resume: { claude?: string; codex?: string }, cwd?: string) => {
       const dir = sessionState(tabId);
       await mkdir(dir, { recursive: true }).catch(() => {});
       await rm(path.join(dir, 'resume'), { force: true }).catch(() => {});
       await rm(path.join(dir, 'resume-codex'), { force: true }).catch(() => {});
-      if (resume.claude) await writeFile(path.join(dir, 'resume'), resume.claude, 'utf8');
+      // Arming a conversation that does not exist is worse than not arming one:
+      // `claude --resume` fails outright, where an unarmed tab merely starts
+      // fresh. A tab can hold an id nothing was ever written under — one
+      // handed out for a session where nothing was said, or left behind by an
+      // agent that never started.
+      const transcript = resume.claude
+        ? await stat(path.join(claudeProjects(cwd ?? ''), `${resume.claude}.jsonl`)).catch(
+            () => null,
+          )
+        : null;
+      if (resume.claude && (!cwd || transcript)) {
+        await writeFile(path.join(dir, 'resume'), resume.claude, 'utf8');
+      }
       if (resume.codex) await writeFile(path.join(dir, 'resume-codex'), resume.codex, 'utf8');
       return dir;
     },
   );
 
-  /** Which conversation the tab is actually on, as reported by the shim. */
-  ipcMain.handle('agent:current-session', async (_e, tabId: string) => {
-    const file = path.join(sessionState(tabId), 'current');
-    return (await readFile(file, 'utf8').catch(() => '')).trim() || null;
+  /**
+   * What the tab's agent has said about itself.
+   *
+   * `current` is written by the shim when it hands out an id, and by Claude's
+   * SessionStart hook for every other way a conversation can begin. `status`
+   * is written only by the hooks — an agent that reports is an agent whose
+   * state is a fact rather than a guess about output timing.
+   */
+  ipcMain.handle('agent:report', async (_e, tabId: string) => {
+    const dir = sessionState(tabId);
+    const read = async (name: string) =>
+      (await readFile(path.join(dir, name), 'utf8').catch(() => '')).trim() || null;
+    return { sessionId: await read('current'), status: await read('status') };
   });
 
   ipcMain.handle('agent:newest-codex-session', async (_e, since: number) => {

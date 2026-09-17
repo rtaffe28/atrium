@@ -95,15 +95,21 @@ function Workspace() {
   /**
    * Open a session running `command` — or a plain shell, when it is blank.
    *
-   * The directory is always inherited from the session you are in. Agents ask
+   * The directory is always inherited from the terminal you are in. Agents ask
    * permission per directory, and the home folder is the one nobody should
    * grant wholesale, so a new session lands in the project you are already
    * working in rather than back at ~. With nothing to inherit from there is no
    * better answer than ~, and that is the first session only.
+   *
+   * The tab's directory before the session's: the session's is where it was
+   * opened, which stops being true the moment you cd, and cd-ing to the
+   * project you want and opening a session there is the obvious gesture.
    */
   const openSession = useCallback(
     (command: string) => {
-      const inherited = sessions.find((s) => s.id === activeId)?.cwd;
+      const group = active && targetGroupId ? active.groups[targetGroupId] : null;
+      const tab = group?.activeTabId ? active?.tabs[group.activeTabId] : null;
+      const inherited = tab?.cwd || active?.cwd;
       const created = driver.createSession({
         title: command.trim() || 'Shell',
         cwd: inherited || '~',
@@ -117,7 +123,7 @@ function Workspace() {
       const firstTab = Object.keys(created.tabs)[0];
       if (firstTab) setFocusRequest(requestFocus(firstTab));
     },
-    [driver, sessions, activeId],
+    [driver, active, targetGroupId],
   );
 
   // Both take no arguments on purpose: they are handed straight to onClick and

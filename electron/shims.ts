@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import BASHRC from './shell/bashrc.sh';
 import CLAUDE_SHIM from './shell/claude.sh';
+import HOOK from './shell/hook.sh';
 import CODEX_SHIM from './shell/codex.sh';
 import ZSHENV from './shell/zshenv.zsh';
 
@@ -25,6 +26,11 @@ import ZSHENV from './shell/zshenv.zsh';
  * 633 / OSC 133 protocol, so the shell reports the command line and its exit
  * code instead of Atrium inferring them from the foreground process — which
  * lies when a process renames itself — and from reassembled keystrokes.
+ *
+ * The shell can only report on the shell. What the agent inside it is doing,
+ * and which conversation it is on, only the agent knows — so Claude Code is
+ * handed a settings file registering its lifecycle hooks against `hook`, and
+ * says both itself.
  */
 
 /**
@@ -49,6 +55,39 @@ function makeDirectory(name: string): string {
   return dir;
 }
 
+/** Named by the shim as well, which passes it to `claude --settings`. */
+export const CLAUDE_SETTINGS = 'claude-settings.json';
+
+/**
+ * Claude Code's lifecycle hooks, pointed back at us.
+ *
+ * Four events, and between them a tab knows what its agent is doing without
+ * anything being inferred from bytes on a screen:
+ *
+ *   SessionStart       which conversation this is, however it began
+ *   UserPromptSubmit   a turn has started
+ *   Stop               the turn is over
+ *   Notification       the agent is asking for something
+ *   SessionEnd         there is no agent here any more
+ *
+ * `--settings` is an additional layer rather than a replacement, so the user's
+ * own hooks still run; Claude concatenates the arrays.
+ */
+function claudeSettings(hook: string): string {
+  const call = (status: string) => ({
+    hooks: [{ type: 'command', command: `${JSON.stringify(hook)} ${status}`, timeout: 5 }],
+  });
+  return JSON.stringify({
+    hooks: {
+      SessionStart: [call('')],
+      UserPromptSubmit: [call('working')],
+      Stop: [call('done')],
+      Notification: [call('waiting')],
+      SessionEnd: [call('clear')],
+    },
+  });
+}
+
 let cached: string | null = null;
 
 /** Create the shim directory once per app run. */
@@ -60,11 +99,13 @@ export function shimDirectory(): string | null {
     for (const [name, body] of [
       ['claude', CLAUDE_SHIM],
       ['codex', CODEX_SHIM],
+      ['hook', HOOK],
     ] as const) {
       const shim = join(dir, name);
       writeFileSync(shim, body, 'utf8');
       chmodSync(shim, 0o755);
     }
+    writeFileSync(join(dir, CLAUDE_SETTINGS), claudeSettings(join(dir, 'hook')), 'utf8');
     cached = dir;
     return dir;
   } catch (error) {

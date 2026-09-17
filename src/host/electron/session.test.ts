@@ -5,6 +5,10 @@ import type { AtriumBridge } from './bridge';
 /** A bridge that records calls and lets a test decide what is running. */
 function fakeBridge() {
   let foreground: Record<string, string> = {};
+  let report: { sessionId: string | null; status: string | null } = {
+    sessionId: null,
+    status: null,
+  };
   const spawned: Array<{ id: string; cwd: string }> = [];
   const written: Array<{ id: string; data: string }> = [];
   let onData: ((id: string, data: string) => void) | null = null;
@@ -30,7 +34,7 @@ function fakeBridge() {
     },
     agent: {
       prepareSession: vi.fn(async () => '/tmp/state'),
-      currentSession: vi.fn(async () => null),
+      report: vi.fn(async () => report),
       newestCodexSession: vi.fn(async () => null),
     },
     notify: { post: vi.fn() },
@@ -45,6 +49,9 @@ function fakeBridge() {
     emit: (id: string, data: string) => onData?.(id, data),
     setForeground: (f: Record<string, string>) => {
       foreground = f;
+    },
+    setReport: (next: { sessionId?: string; status?: string }) => {
+      report = { sessionId: null, status: null, ...next };
     },
   };
 }
@@ -92,6 +99,78 @@ describe('what a tab is running, as reported by the shell', () => {
     expect(tab.title, 'idle again').toBe('zsh');
     // But the command stays: it is what a restore has to go on.
     expect(tab.command, 'restore needs this').toBe('npm run dev');
+    driver.dispose();
+  });
+
+  /**
+   * The session's own cwd is where it was opened. A new session inheriting
+   * that puts you back where you started rather than where you are.
+   */
+  it('follows the shell into a new directory', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
+    expect(driver.list()[0].tabs[tabId].cwd).toBe('/Users/ryan/git/atrium');
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium/src'));
+    expect(driver.list()[0].tabs[tabId].cwd).toBe('/Users/ryan/git/atrium/src');
+    driver.dispose();
+  });
+
+  /** It arrives on every prompt; unchanged must not mean a workspace write. */
+  it('does not touch the session when the directory has not changed', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
+    const before = driver.list()[0];
+
+    f.emit(tabId, osc('633;P;Cwd=/Users/ryan/git/atrium'));
+    expect(driver.list()[0]).toBe(before);
+    driver.dispose();
+  });
+
+  /**
+   * Claude files a conversation under the directory it ran in, so a tab that
+   * comes back somewhere else cannot resume it however good the id is.
+   */
+  it('reopens a tab where it was, not where the session was opened', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const saved = driver.snapshot();
+    const tabId = Object.keys(saved[0].tabs)[0];
+    saved[0].cwd = '/Users/ryan';
+    saved[0].tabs[tabId].cwd = '/Users/ryan/git/atrium';
+
+    for (const session of driver.list()) driver.killSession(session.id);
+    f.spawned.length = 0;
+    driver.hydrate(saved, {});
+
+    expect(f.spawned.find((s) => s.id === tabId)?.cwd).toBe('/Users/ryan/git/atrium');
+    driver.dispose();
+  });
+
+  /**
+   * `claude --resume` with no id opens a picker, and `/resume` switches inside
+   * a running process. Neither reaches the shim, so a tab that only trusted
+   * the shim kept arming the conversation you had left behind. The agent's own
+   * SessionStart hook fires for all of them.
+   */
+  it('follows the user into a conversation they resumed themselves', async () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+
+    f.setForeground({ [tabId]: '2.1.273' });
+    f.setReport({ sessionId: '62501422-cc78-44a5-87cb-00f03cf9df28' });
+    await driver.refreshCommands();
+
+    expect(driver.list()[0].tabs[tabId].agentSessionId).toBe(
+      '62501422-cc78-44a5-87cb-00f03cf9df28',
+    );
     driver.dispose();
   });
 
@@ -240,6 +319,30 @@ describe('typing is not the agent working', () => {
     const state = () => driver.list()[0].tabs.t1.agentState;
     return { f, driver, state };
   }
+
+  /**
+   * The rail flickered between "working" and "needs you" because output kept
+   * arriving after the agent had asked its question — a spinner redrawing is
+   * output, and output was the evidence of work. No refinement of which bytes
+   * count fixes that; the presence of output simply does not carry the
+   * information. So once the agent has said what it is doing, nothing else in
+   * this class gets a vote on the matter.
+   */
+  it('stops guessing once the agent reports for itself', async () => {
+    vi.useFakeTimers();
+    const { f, driver, state } = agentTab();
+
+    f.setForeground({ t1: '2.1.273' });
+    f.setReport({ sessionId: 'abc', status: 'waiting' });
+    await driver.refreshCommands();
+    expect(state()).toBe('waiting');
+
+    // The agent explaining what it wants, while it waits for the answer.
+    f.emit('t1', 'Do you want me to edit this file?\r\n');
+    vi.advanceTimersByTime(5000);
+    expect(state(), 'output is not a second opinion').toBe('waiting');
+    driver.dispose();
+  });
 
   it('stays quiet while a keystroke echoes back', () => {
     vi.useFakeTimers();
