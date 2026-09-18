@@ -112,3 +112,4 @@ and survive the split, so a gap in one folder is a document in the other.
 8. [`completed/07-persistence.md`](docs/plan/completed/07-persistence.md) — restore, and what it cannot do
 9. [`active/08-packaging.md`](docs/plan/active/08-packaging.md) — bundling, installing, signing
 10. [`active/12-agent-state.md`](docs/plan/active/12-agent-state.md) — what a tab knows about its agent, and how well
+11. [`active/13-dogfooding.md`](docs/plan/active/13-dogfooding.md) — what developing Atrium in Atrium has turned up

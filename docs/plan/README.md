@@ -20,6 +20,7 @@ in one folder is a document sitting in the other.
 | [`09-borrowed-ideas.md`](active/09-borrowed-ideas.md) | what to take from VS Code and cmux next |
 | [`10-keyboard.md`](active/10-keyboard.md) | the binding table, and the palette that would reshape it |
 | [`12-agent-state.md`](active/12-agent-state.md) | which agent states are reported, which are guessed, and what would fix the guessing |
+| [`13-dogfooding.md`](active/13-dogfooding.md) | what developing Atrium in Atrium has turned up, and what to do about it |
 
 ## completed/ — built, and now the reference
 
