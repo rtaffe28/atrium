@@ -1,5 +1,6 @@
 import { MockDriver } from '../../session/mock';
 import type {
+  Build,
   Capabilities,
   FileDriver,
   Host,
@@ -24,6 +25,13 @@ function detectPlatform(): Platform {
 class BrowserWindowDriver implements WindowDriver {
   platform(): Platform {
     return detectPlatform();
+  }
+
+  build(): Build {
+    // A browser tab only ever exists because someone ran `npm run dev`; the
+    // bundler's own flag is the honest answer, and there is no installed
+    // browser build for it to be confused with.
+    return import.meta.env.DEV ? 'dev' : 'release';
   }
 
   chromeInsets() {

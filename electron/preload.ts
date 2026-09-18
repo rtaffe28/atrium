@@ -15,6 +15,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 export interface HostInfo {
   platform: 'mac' | 'win' | 'linux';
+  build: 'dev' | 'release';
   insets: { lead: number; trail: number };
   home: string;
   shell: string;

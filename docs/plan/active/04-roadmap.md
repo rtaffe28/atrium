@@ -43,16 +43,19 @@ fixes it on postinstall. Expect the same class of problem when packaging —
 native helpers have to keep their permissions through asar packing and code
 signing.
 
-### Stage 3 — a real terminal in a browser tab
+### ✅ Stage 3 — a real terminal in a browser tab
 
-Scratch project: a ~40-line WebSocket server. `ws.on('message') → pty.write`,
-`pty.onData → ws.send`, xterm.js on the other end. This is the core of the
-product, proven in isolation.
+Done, though not as a scratch WebSocket server. Stage 6 arrived first and the
+transport became Electron IPC instead: `pty:write` one way, `pty:data` pushed
+back on its own channel, xterm.js on the other end. Same loop, same proof — a
+renderer-side terminal driving a process it does not own — so the separate
+project would only have been a second copy of it.
 
-### Stage 4 — resize
+### ✅ Stage 4 — resize
 
-Wire cols/rows through and watch `vim` go from broken to correct. Now SIGWINCH
-means something.
+Done with stage 5. `pty:resize` carries cols and rows from the fit addon to
+`pty.resize`, which is what makes full-screen programs render correctly rather
+than into an 80×24 corner. SIGWINCH means something now.
 
 ### ✅ Stage 5 — real PTYs in Atrium
 

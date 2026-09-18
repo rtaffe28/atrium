@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest';
 import App from '../App';
 import { MockHost } from './mock';
-import type { Capabilities, Host, Platform } from './types';
+import type { Build, Capabilities, Host, Platform } from './types';
 
 /**
  * The point of the Host interface is that the app works against any
@@ -12,6 +12,7 @@ import type { Capabilities, Host, Platform } from './types';
 function hostWith(overrides: {
   capabilities?: Partial<Capabilities>;
   platform?: Platform;
+  build?: Build;
   insets?: { lead: number; trail: number };
 }): Host {
   const base = new MockHost();
@@ -22,6 +23,7 @@ function hostWith(overrides: {
     window: {
       ...base.window,
       platform: () => overrides.platform ?? 'linux',
+      build: () => overrides.build ?? 'release',
       chromeInsets: () => overrides.insets ?? { lead: 0, trail: 0 },
       subscribe: base.window.subscribe.bind(base.window),
     },
@@ -70,6 +72,18 @@ describe('host injection', () => {
     const titlebar = document.querySelector('.titlebar') as HTMLElement;
     expect(titlebar.className).toContain('platform-win');
     expect(titlebar.style.getPropertyValue('--chrome-trail')).toBe('138px');
+  });
+
+  it('marks a development window so it cannot be mistaken for the installed app', () => {
+    render(<App host={hostWith({ build: 'dev' })} />);
+
+    expect(screen.getByText('dev')).toBeTruthy();
+  });
+
+  it('leaves the installed app unmarked', () => {
+    render(<App host={hostWith({ build: 'release' })} />);
+
+    expect(document.querySelector('.build-badge')).toBeNull();
   });
 
   it('reports its own capabilities honestly', () => {

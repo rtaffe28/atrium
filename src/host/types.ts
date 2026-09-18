@@ -105,6 +105,16 @@ export interface NotifyDriver {
 
 export type Platform = 'mac' | 'win' | 'linux';
 
+/**
+ * Which copy of the app this is.
+ *
+ * 'dev' is a run from a checkout, 'release' one the user installed. The app
+ * cannot work this out for itself — the same bundle of renderer code runs in
+ * both — so the host, which already decides where `userData` lives on exactly
+ * this distinction, reports it.
+ */
+export type Build = 'dev' | 'release';
+
 export interface WindowState {
   focused: boolean;
   fullscreen: boolean;
@@ -112,6 +122,14 @@ export interface WindowState {
 
 export interface WindowDriver {
   platform(): Platform;
+  /**
+   * Whether this window belongs to a development run or an installed app.
+   *
+   * Developing Atrium inside Atrium puts two identical windows on screen, and
+   * mistaking the installed one for the build under test means typing into the
+   * window holding your real agents. The title bar marks the dev one.
+   */
+  build(): Build;
   /**
    * Space to leave clear of the OS window controls, in CSS pixels.
    *

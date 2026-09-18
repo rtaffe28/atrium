@@ -130,6 +130,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('host:info', () => ({
     platform:
       process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux',
+    // The same bit that moved `userData` aside above. The renderer cannot see
+    // `app.isPackaged`, and it is what tells the two windows apart on screen.
+    build: app.isPackaged ? 'release' : 'dev',
     insets,
     home: env.HOME ?? env.USERPROFILE ?? '',
     shell: env.SHELL ?? process.env.COMSPEC ?? '',

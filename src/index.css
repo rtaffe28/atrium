@@ -69,7 +69,7 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 }
 .titlebar button, .titlebar kbd { -webkit-app-region: no-drag; }
 
-.titlebar-lead { flex: 0 0 auto; }
+.titlebar-lead { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
 .titlebar-center {
   flex: 1;
   display: flex;
@@ -89,6 +89,22 @@ button { font-family: inherit; font-size: inherit; cursor: pointer; }
 
 
 .wordmark { font-weight: 600; letter-spacing: 0.02em; }
+
+/* The one thing on screen that says which window this is. Yellow because it
+   is a caution, not an error, and small enough to ignore once you know. */
+.build-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.5;
+}
 
 .crumb {
   font-family: var(--font-mono);
