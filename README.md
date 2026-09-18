@@ -30,6 +30,33 @@ once per checkout; the run tells you the two commands if it is not. See
 server** — a long-running Vite serving a stale module graph looks exactly like
 a broken app.
 
+## Developing Atrium inside Atrium
+
+The dev build and the installed app run side by side. Nothing calls
+`requestSingleInstanceLock`, and an unpackaged run moves its own state out of
+the way — `main.ts` appends `-dev` to `userData` before `ready`, so the
+installed app keeps `~/.config/atrium` (Application Support on macOS) and a dev
+run gets `atrium-dev`: its own workspace, scrollback, shims and cookies. The
+instance holding your agents cannot be overwritten by the one you are testing.
+
+Two long-running commands, which is what a session with two tabs is for:
+
+```sh
+npm run dev       # vite on :5173 — leave it running
+npm run electron  # the build under test; relaunch this per change
+```
+
+Only the second restarts as you work.
+
+**Do not run `npm run install:app` from inside Atrium.** It replaces
+`/opt/Atrium` (or the bundle in /Applications) underneath the process you are
+working in. Iterate with `npm run electron`, and adopt a build from outside.
+
+Two things to expect. `atrium-dev` starts empty, so the first dev launch has no
+sessions rather than a copy of your workspace — that is the isolation working.
+And the two windows are identical: same icon, same title bar, nothing marks
+which is which.
+
 ## Layout
 
 ```
