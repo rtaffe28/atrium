@@ -84,19 +84,27 @@ sounds (off by default), which states notify, and terminal font size. The
 workspace persists and restores across restarts — see `../completed/07-persistence.md`,
 including what restore cannot do.
 
-### Stage 7 — worktrees
-
-Each session gets its own `git worktree`. Creation, listing, cleanup. Now it is
-Atrium rather than a terminal with tabs.
-
-### Stage 8 — lifecycle
+### Stage 7 — lifecycle
 
 Quit the app with agents running, then `ps -o pid,pgid,command`. The orphans
 you find are what open question **O1** is actually about. Decide daemon or no
 daemon with evidence in hand.
 
+## Worktrees are no longer a stage
+
+This used to be stage 7: a `git worktree` per session, created and owned by the
+app. It is struck rather than deferred, so the countdown lost a stage instead
+of carrying one it was not going to reach.
+
+A session runs in whatever directory you point it at, which may perfectly well
+be a worktree you made yourself — that works today, and is how this project is
+developed. What the app will not do is impose one per session. The opt-in
+version is in the list below, where an idea with no date belongs.
+
 ## Later, unscheduled
 
+- A worktree on request: an action that creates one and opens a session on it,
+  for when you want the isolation. Optional, never automatic.
 - Windows port (forces the abstraction honest — do it before Linux).
 - Linux port (mostly free once Windows is done).
 - Diff review pane per session, as a third tab kind.

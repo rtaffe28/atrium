@@ -15,7 +15,7 @@ in one folder is a document sitting in the other.
 | [`00-overview.md`](active/00-overview.md) | what Atrium is and what it has to do |
 | [`02-decisions.md`](active/02-decisions.md) | Electron vs Tauri, why not fork cmux, open questions O1–O3 |
 | [`03-architecture.md`](active/03-architecture.md) | the seam, the cross-platform table, and who owns the PTYs |
-| [`04-roadmap.md`](active/04-roadmap.md) | the eight stages; 7 and 8 are still ahead |
+| [`04-roadmap.md`](active/04-roadmap.md) | the stages; lifecycle is the one still ahead |
 | [`08-packaging.md`](active/08-packaging.md) | macOS and Linux build and install; Windows unbuilt, signing unsolved |
 | [`09-borrowed-ideas.md`](active/09-borrowed-ideas.md) | what to take from VS Code and cmux next |
 | [`10-keyboard.md`](active/10-keyboard.md) | the binding table, and the palette that would reshape it |

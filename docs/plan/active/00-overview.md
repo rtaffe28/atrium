@@ -2,7 +2,7 @@
 
 A desktop workspace for running several coding agents in parallel: one window,
 a rail of sessions, each session a real terminal attached to a real agent CLI
-in its own git worktree.
+in a directory you choose.
 
 Prior art is [cmux](https://github.com/manaflow-ai/cmux). The thesis here is
 different in one specific way: **the interface is the product**. cmux is a
@@ -13,7 +13,8 @@ multi-session workflow, not the glyph renderer.
 
 ## What it has to do
 
-- Run N agent sessions at once, each in its own worktree, each with a real PTY.
+- Run N agent sessions at once, each on its own real PTY, each rooted wherever
+  you point it — a repo, a subdirectory, a worktree you made yourself.
 - Give each session a workspace, not a single terminal: split panes, each with
   tabs, each tab a terminal or a browser. Tabs drag between panes, split on
   drop, or graduate into a session of their own.
@@ -32,10 +33,14 @@ multi-session workflow, not the glyph renderer.
 
 ## Where the project is right now
 
-**Stage 1 of 8** — a UI mock running in a browser tab, with a `MockDriver`
-producing scripted agent output. No processes, no PTYs, no Electron. The point
-is to iterate on the interface at browser speed before paying for any systems
-work.
+**Stage 6.5 of 7** — a working Electron app: real processes on real
+pseudo-terminals, shell integration under zsh and bash, Claude lifecycle hooks
+reporting what each agent is doing, settings, and a workspace that restores
+across restarts. `MockHost` still runs the whole interface in a browser tab
+against scripted output, and stays a supported target rather than scaffolding.
+
+What remains is stage 7, lifecycle: what happens to running agents when the app
+quits.
 
 The interface model — sessions, split panes, tabs, drag targets, derived state
 and notifications — is documented in `../completed/05-ui-model.md`. See `04-roadmap.md` for

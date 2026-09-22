@@ -51,17 +51,21 @@ nothing. Switching sessions, creating one in a chosen directory, splitting,
 and changing the agent are all buried in clicks. This is the cheapest large
 improvement to how the app feels.
 
-**Worktree per session (cmux).** Sessions carry a `branch` field that nothing
-honours. Creating a real `git worktree` per session is what makes parallel
-agents safe rather than merely simultaneous — otherwise they fight over one
-checkout. Stage 7 of the roadmap.
-
 ## Where the two disagree, and which to follow
 
 **cmux keeps its terminal native (Ghostty); VS Code renders in a webview.**
 Atrium follows VS Code, deliberately — the interface is the product here and
 one identical surface on three platforms is worth more than glyph throughput.
 See `02-decisions.md`.
+
+**cmux gives every session its own `git worktree`.** Atrium takes the idea
+without the enforcement. A session runs in the directory you point it at, and
+pointing it at a worktree you made yourself is already the whole feature —
+it is how this project is developed. One per session, created and owned by the
+app, is not a thing to impose; the convenience version, an action that makes a
+worktree and opens a session on it, is unscheduled. Sessions still carry a
+`branch` field that nothing honours, which wants filling in from the directory
+or removing.
 
 **cmux binds a tab to a conversation for the tab's lifetime.** Atrium binds it
 for a restore only. Exiting an agent and starting it again should give a new

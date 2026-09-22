@@ -3,13 +3,13 @@
 A desktop workspace for running several coding agents in parallel — one window,
 a rail of sessions, each a real terminal in a directory you choose.
 
-**Status: a working app, through stage 6.5 of 8.** Real processes on real
+**Status: a working app, through stage 6.5 of 7.** Real processes on real
 pseudo-terminals, a frameless Electron window, zsh and bash shell integration,
 Claude lifecycle hooks reporting what each agent is doing, settings, and a
-workspace that survives a restart. What remains is stage 7, a worktree per
-session, and stage 8, deciding what happens to running agents when the app
-quits. [`docs/plan/active/04-roadmap.md`](docs/plan/active/04-roadmap.md) has
-the stage-by-stage detail.
+workspace that survives a restart. What remains is stage 7: deciding what
+happens to running agents when the app quits.
+[`docs/plan/active/04-roadmap.md`](docs/plan/active/04-roadmap.md) has the
+stage-by-stage detail.
 
 `MockHost` still runs the whole interface in a browser tab against scripted
 output. That is the design loop and a supported target that keeps the host seam
@@ -116,7 +116,7 @@ and survive the split, so a gap in one folder is a document in the other.
 2. [`completed/01-terminal-primer.md`](docs/plan/completed/01-terminal-primer.md) — how terminals actually work
 3. [`active/02-decisions.md`](docs/plan/active/02-decisions.md) — Electron vs Tauri, why not fork cmux
 4. [`active/03-architecture.md`](docs/plan/active/03-architecture.md) — the seam, cross-platform table
-5. [`active/04-roadmap.md`](docs/plan/active/04-roadmap.md) — the eight stages
+5. [`active/04-roadmap.md`](docs/plan/active/04-roadmap.md) — the stages, and what remains
 6. [`completed/05-ui-model.md`](docs/plan/completed/05-ui-model.md) — sessions, panes, tabs, drag, notifications
 7. [`completed/06-host-interface.md`](docs/plan/completed/06-host-interface.md) — the cross-platform host seam
 8. [`completed/07-persistence.md`](docs/plan/completed/07-persistence.md) — restore, and what it cannot do

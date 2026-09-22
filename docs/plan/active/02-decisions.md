@@ -79,5 +79,8 @@ Flattening real platform conventions makes an app feel broken, not consistent.
   (tmux's model; survives restarts, keeps scrollback). See `03-architecture.md`.
   Deferred until stage 5, but the seam is built so it stays cheap.
 - **O2 — Do we bundle a font, or accept three looks?** Leaning bundle.
-- **O3 — Worktree lifecycle.** Who creates them, who cleans them up, and what
-  happens to a worktree whose agent crashed.
+- **O3 — Worktree lifecycle.** Only live if Atrium ever creates worktrees
+  itself, which is now an unscheduled convenience rather than a stage — see
+  `04-roadmap.md`. A session pointed at a worktree the user made raises none of
+  it: who creates them, who cleans them up, and what happens to one whose agent
+  crashed are all answered by whoever made it.
