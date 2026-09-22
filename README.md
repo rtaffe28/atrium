@@ -1,7 +1,7 @@
 # atrium
 
 A desktop workspace for running several coding agents in parallel — one window,
-a rail of sessions, each a real terminal in its own git worktree.
+a rail of sessions, each a real terminal in a directory you choose.
 
 **Status: a working app, through stage 6.5 of 8.** Real processes on real
 pseudo-terminals, a frameless Electron window, zsh and bash shell integration,
