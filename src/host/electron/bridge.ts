@@ -3,6 +3,8 @@ import type { PersistedWorkspace } from '../types';
 /** The shape the preload exposes. Kept here so the renderer has one source. */
 export interface HostInfo {
   platform: 'mac' | 'win' | 'linux';
+  /** Unpackaged run or installed app — `app.isPackaged`, as the renderer sees it. */
+  build: 'dev' | 'release';
   insets: { lead: number; trail: number };
   home: string;
   shell: string;

@@ -1,4 +1,5 @@
 import type {
+  Build,
   FileDriver,
   PersistedWorkspace,
   WorkspaceDriver,
@@ -58,6 +59,10 @@ class ElectronWindowDriver implements WindowDriver {
 
   platform(): Platform {
     return this.info.platform;
+  }
+
+  build(): Build {
+    return this.info.build;
   }
 
   chromeInsets() {

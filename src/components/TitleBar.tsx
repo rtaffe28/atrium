@@ -16,6 +16,14 @@ import type { Session, TabKind } from '../session/types';
  * Both the platform and the inset sizes come from the host. A browser tab has
  * no window controls to avoid and reports zero; a frameless Electron window
  * reports the real numbers. The component never sniffs a user agent.
+ *
+ * The `dev` marker beside the wordmark comes from the host too. Developing
+ * Atrium inside Atrium leaves two identical windows open: mistaking the dev
+ * build for the installed one wastes a moment, and mistaking the installed one
+ * for the dev build means typing into the window holding your real agents. The
+ * marker sits by the wordmark rather than the session crumbs because it is a
+ * property of the window, and because a dev run that has restored nothing yet
+ * has no session for it to sit beside.
  */
 
 interface Props {
@@ -28,6 +36,7 @@ interface Props {
 export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab }: Props) {
   const host = useHost();
   const platform = host.window.platform();
+  const build = host.window.build();
   const insets = host.window.chromeInsets();
 
   return (
@@ -42,6 +51,11 @@ export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab }: Props
     >
       <div className="titlebar-lead">
         <span className="wordmark">atrium</span>
+        {build === 'dev' && (
+          <span className="build-badge" title="Development build — its own workspace in atrium-dev">
+            dev
+          </span>
+        )}
       </div>
 
       <div className="titlebar-center">

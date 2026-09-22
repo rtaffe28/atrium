@@ -3,16 +3,24 @@
 A desktop workspace for running several coding agents in parallel — one window,
 a rail of sessions, each a real terminal in its own git worktree.
 
-**Status: stage 1 of 8.** This is a UI mock. There are no real processes; a
-`MockDriver` plays scripted agent output so the interface can be designed at
-browser speed before any systems work. See [`docs/plan/`](docs/plan).
+**Status: a working app, through stage 6.5 of 8.** Real processes on real
+pseudo-terminals, a frameless Electron window, zsh and bash shell integration,
+Claude lifecycle hooks reporting what each agent is doing, settings, and a
+workspace that survives a restart. What remains is stage 7, a worktree per
+session, and stage 8, deciding what happens to running agents when the app
+quits. [`docs/plan/active/04-roadmap.md`](docs/plan/active/04-roadmap.md) has
+the stage-by-stage detail.
+
+`MockHost` still runs the whole interface in a browser tab against scripted
+output. That is the design loop and a supported target that keeps the host seam
+honest, not scaffolding left over from the mock.
 
 ```sh
 npm install
 
 npm run dev       # design loop in a browser tab, MockHost
 npm run electron  # the real app: real PTYs, needs `npm run dev` running
-npm test          # 51 tests
+npm test          # the suite; the run is the only count that cannot go stale
 npm run pty:clean # see a raw pseudo-terminal work, nothing else in the way
 
 npm run install:app  # build and install — /Applications, or a .deb via apt
@@ -54,8 +62,10 @@ working in. Iterate with `npm run electron`, and adopt a build from outside.
 
 Two things to expect. `atrium-dev` starts empty, so the first dev launch has no
 sessions rather than a copy of your workspace — that is the isolation working.
-And the two windows are identical: same icon, same title bar, nothing marks
-which is which.
+And the dev window carries a small yellow `dev` beside the wordmark, from the
+same `app.isPackaged` bit that moved its `userData` aside; an unmarked title
+bar is the installed app, holding your real agents. The taskbar icons are still
+identical, so the title bar is what to check once both windows are open.
 
 ## Layout
 

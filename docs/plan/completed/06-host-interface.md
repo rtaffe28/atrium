@@ -12,7 +12,7 @@ interface Host {
   git: GitDriver               // worktrees, status, diff
   files: FileDriver            // read, write, watch
   notify: NotifyDriver         // native notification + sound
-  window: WindowDriver         // platform, chrome insets, focus
+  window: WindowDriver         // platform, dev-or-installed build, chrome insets, focus
 }
 ```
 
