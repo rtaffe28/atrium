@@ -1,4 +1,5 @@
 import type { SurfaceDriver, SurfaceEvent, Unsubscribe } from '../types';
+import type { AtriumBridge } from './bridge';
 
 interface Entry {
   view: HTMLElement & {
@@ -6,6 +7,7 @@ interface Entry {
     reload(): void;
     goBack(): void;
     goForward(): void;
+    getWebContentsId(): number;
   };
   listeners: Set<(event: SurfaceEvent) => void>;
 }
@@ -20,9 +22,31 @@ interface Entry {
 export class WebviewSurfaces implements SurfaceDriver {
   private entries = new Map<string, Entry>();
 
+  constructor(bridge: AtriumBridge) {
+    // One subscription for every surface: the main process names the
+    // webContents that asked, and only the view itself knows which that is.
+    bridge.surfaces.onOpen((webContentsId, url) => {
+      for (const entry of this.entries.values()) {
+        if (!entry.view || !entry.view.isConnected) continue;
+        let id: number;
+        try {
+          id = entry.view.getWebContentsId();
+        } catch {
+          continue; // not attached yet
+        }
+        if (id !== webContentsId) continue;
+        for (const listener of entry.listeners) listener({ type: 'open', url });
+        return;
+      }
+    });
+  }
+
   mount(id: string, container: HTMLElement, options: { url?: string }): Unsubscribe {
     const view = document.createElement('webview') as Entry['view'];
     view.className = 'surface-frame';
+    // Without this the guest drops new-window requests before the main
+    // process sees them. Every one is denied there and becomes a tab instead.
+    view.setAttribute('allowpopups', '');
     if (options.url) view.src = options.url;
 
     const listeners = this.entries.get(id)?.listeners ?? new Set();

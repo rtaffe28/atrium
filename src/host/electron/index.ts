@@ -110,7 +110,7 @@ class ElectronFiles implements FileDriver {
 export class ElectronHost implements Host {
   readonly name = 'electron';
   readonly sessions: ElectronSessionDriver;
-  readonly surfaces = new WebviewSurfaces();
+  readonly surfaces: WebviewSurfaces;
   readonly files: ElectronFiles;
   readonly notify: NativeNotify;
   readonly window: ElectronWindowDriver;
@@ -119,6 +119,7 @@ export class ElectronHost implements Host {
 
   constructor(bridge: AtriumBridge, info: HostInfo, restore?: RestoreInput) {
     this.sessions = new ElectronSessionDriver(bridge, info.home, info.shell, info.sessionState, restore);
+    this.surfaces = new WebviewSurfaces(bridge);
     this.workspace = new FileWorkspace(bridge);
     this.files = new ElectronFiles(bridge);
     this.notify = new NativeNotify(bridge);

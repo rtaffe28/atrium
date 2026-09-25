@@ -54,7 +54,9 @@ export type SurfaceEvent =
   | { type: 'title'; title: string }
   | { type: 'url'; url: string }
   | { type: 'loading'; loading: boolean }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  /** The page asked for a link in a new tab: a Cmd/Ctrl-click, or target=_blank. */
+  | { type: 'open'; url: string };
 
 /**
  * Embedded web content.

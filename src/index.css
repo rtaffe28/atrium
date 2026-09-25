@@ -46,6 +46,11 @@ body {
 
 body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select: none; }
 body.is-resizing, body.is-resizing * { user-select: none; }
+body.is-resizing-row, body.is-resizing-row * { cursor: col-resize !important; }
+body.is-resizing-column, body.is-resizing-column * { cursor: row-resize !important; }
+/* An embedded page is its own document and swallows every pointer event over
+   it, so a splitter or tab drag crossing a browser pane would stall there. */
+body.is-resizing .surface-frame, body.is-dragging .surface-frame { pointer-events: none; }
 
 button { font-family: inherit; font-size: inherit; cursor: pointer; }
 
@@ -358,13 +363,15 @@ kbd {
 .split-column { flex-direction: column; }
 .split-child { display: flex; flex-basis: 0; min-width: 0; min-height: 0; }
 
-.splitter { flex: 0 0 auto; background: var(--border-soft); position: relative; }
+/* The line is 1px; the grab area either side of it is not. z-index keeps that
+   area above the next pane, which comes later in the DOM and would cover it. */
+.splitter { flex: 0 0 auto; background: var(--border-soft); position: relative; z-index: 2; touch-action: none; }
 .splitter::after { content: ''; position: absolute; }
 .splitter-row { width: 1px; cursor: col-resize; }
-.splitter-row::after { inset: 0 -3px; }
+.splitter-row::after { inset: 0 -4px; }
 .splitter-column { height: 1px; cursor: row-resize; }
-.splitter-column::after { inset: -3px 0; }
-.splitter:hover { background: var(--accent); }
+.splitter-column::after { inset: -4px 0; }
+.splitter:hover, .splitter:focus-visible, body.is-resizing .splitter.is-active { background: var(--accent); outline: none; }
 
 .pane {
   flex: 1;

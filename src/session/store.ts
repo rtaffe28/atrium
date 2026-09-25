@@ -1,4 +1,4 @@
-import { leafGroupIds, removeLeaf, setSizesAt, splitLeaf } from '../layout/tree';
+import { leafGroupIds, removeLeaf, rightNeighbor, setSizesAt, splitLeaf } from '../layout/tree';
 import type {
   CreateSessionOptions,
   DataHandler,
@@ -10,6 +10,11 @@ import type {
   TabKind,
   Unsubscribe,
 } from './types';
+
+/** A browser tab's title before the page reports one: its host. */
+export function titleFromUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '').split('/')[0] || 'New tab';
+}
 
 let counter = 0;
 export const uid = (prefix: string) => `${prefix}${++counter}`;
@@ -490,6 +495,43 @@ export abstract class SessionStore implements SessionDriver {
     this.update(sessionId, (session) => ({
       ...session,
       layout: setSizesAt(session.layout, path, sizes) as LayoutNode,
+    }));
+  }
+
+  openLinkBeside(sessionId: string, groupId: string, url: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session?.groups[groupId]) return;
+
+    const tab = this.makeTab('browser', { url, title: titleFromUrl(url) });
+    // Reusing the neighbour keeps a run of Cmd-clicks in one pane of tabs,
+    // rather than halving the screen again with every link.
+    const target = rightNeighbor(session.layout, groupId);
+
+    if (target) {
+      this.update(sessionId, (s) => ({
+        ...s,
+        tabs: { ...s.tabs, [tab.id]: tab },
+        groups: {
+          ...s.groups,
+          [target]: {
+            ...s.groups[target],
+            tabIds: [...s.groups[target].tabIds, tab.id],
+            activeTabId: tab.id,
+          },
+        },
+      }));
+      return;
+    }
+
+    const newGroupId = uid('g');
+    this.update(sessionId, (s) => ({
+      ...s,
+      tabs: { ...s.tabs, [tab.id]: tab },
+      layout: splitLeaf(s.layout, groupId, newGroupId, 'right'),
+      groups: {
+        ...s.groups,
+        [newGroupId]: { id: newGroupId, tabIds: [tab.id], activeTabId: tab.id },
+      },
     }));
   }
 }

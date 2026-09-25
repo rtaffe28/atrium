@@ -58,6 +58,10 @@ export interface AtriumBridge {
     load(): Promise<PersistedWorkspace | null>;
     save(state: PersistedWorkspace): Promise<void>;
   };
+  surfaces: {
+    /** A webview asked for a new window. Identified by its webContents id. */
+    onOpen(handler: (webContentsId: number, url: string) => void): () => void;
+  };
   window: {
     onState(handler: (state: { focused: boolean; fullscreen: boolean }) => void): () => void;
   };
