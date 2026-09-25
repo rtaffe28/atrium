@@ -63,7 +63,7 @@ const bridge = {
       resume: { claude?: string; codex?: string },
       cwd?: string,
     ): Promise<string> => ipcRenderer.invoke('agent:prepare-session', tabId, resume, cwd),
-    report: (tabId: string): Promise<{ sessionId: string | null; status: string | null }> =>
+    report: (tabId: string): Promise<{ sessionId: string | null }> =>
       ipcRenderer.invoke('agent:report', tabId),
     newestCodexSession: (since: number): Promise<string | null> =>
       ipcRenderer.invoke('agent:newest-codex-session', since),

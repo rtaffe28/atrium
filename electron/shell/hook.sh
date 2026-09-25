@@ -1,7 +1,6 @@
 #!/bin/sh
-# Atrium's Claude Code hook. Registered for one lifecycle event per argument:
-#
-#   hook <status>   records that status, and whichever conversation reported it
+# Atrium's Claude Code SessionStart hook: records which conversation this tab
+# is on.
 #
 # Every hook runs in the agent's own process tree, so ATRIUM_SESSION_STATE —
 # exported into the tab's shell before anything starts — says which tab this
@@ -27,14 +26,6 @@ if [ -n "$state" ]; then
   # /resume inside a session that was already running — which is exactly the
   # set of cases a wrapper around the command line cannot see.
   [ -n "$id" ] && printf '%s' "$id" > "$state/current"
-
-  if [ -n "$1" ]; then
-    if [ "$1" = "clear" ]; then
-      rm -f "$state/status"
-    else
-      printf '%s' "$1" > "$state/status"
-    fi
-  fi
 fi
 
 printf '{}\n'

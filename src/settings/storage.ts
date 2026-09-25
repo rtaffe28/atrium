@@ -13,14 +13,13 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      // Merged rather than replaced, so an object written by an older version
-      // cannot drop a key the app now reads.
-      notifyOn: { ...DEFAULT_SETTINGS.notifyOn, ...(parsed.notifyOn ?? {}) },
-    };
+    const parsed = JSON.parse(raw) as Partial<Settings> & Record<string, unknown>;
+    // Written by a version that had alerts for session state. There is no
+    // session state for now, so those keys are only dropped.
+    delete parsed.sounds;
+    delete parsed.notifications;
+    delete parsed.notifyOn;
+    return { ...DEFAULT_SETTINGS, ...parsed };
   } catch {
     return DEFAULT_SETTINGS;
   }

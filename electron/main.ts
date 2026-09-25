@@ -211,18 +211,16 @@ app.whenReady().then(async () => {
   );
 
   /**
-   * What the tab's agent has said about itself.
+   * Which conversation the tab's agent is on.
    *
    * `current` is written by the shim when it hands out an id, and by Claude's
-   * SessionStart hook for every other way a conversation can begin. `status`
-   * is written only by the hooks — an agent that reports is an agent whose
-   * state is a fact rather than a guess about output timing.
+   * SessionStart hook for every other way a conversation can begin.
    */
   ipcMain.handle('agent:report', async (_e, tabId: string) => {
-    const dir = sessionState(tabId);
-    const read = async (name: string) =>
-      (await readFile(path.join(dir, name), 'utf8').catch(() => '')).trim() || null;
-    return { sessionId: await read('current'), status: await read('status') };
+    const current = await readFile(path.join(sessionState(tabId), 'current'), 'utf8').catch(
+      () => '',
+    );
+    return { sessionId: current.trim() || null };
   });
 
   ipcMain.handle('agent:newest-codex-session', async (_e, since: number) => {

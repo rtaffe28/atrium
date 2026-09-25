@@ -164,12 +164,7 @@ export abstract class SessionStore implements SessionDriver {
     );
 
     for (const session of sessions) {
-      // Agent state described a process that no longer exists; claiming a
-      // restored tab is still "working" would be a lie.
-      const tabs = Object.fromEntries(
-        Object.entries(session.tabs).map(([id, tab]) => [id, { ...tab, agentState: undefined }]),
-      );
-      this.sessions.set(session.id, this.sanitize({ ...session, tabs }));
+      this.sessions.set(session.id, this.sanitize(session));
     }
     this.notify();
 

@@ -51,18 +51,12 @@ describe('Claude lifecycle hooks', () => {
    * session already running. The agent is never blind to those, so it is asked
    * instead of inferred from.
    */
-  it('hands Claude the settings that make it report for itself', () => {
+  it('hands Claude the settings that make it say which conversation it is on', () => {
     expect(raw('claude')).toContain(`--settings ${join(shims, 'claude-settings.json')}`);
 
     const settings = JSON.parse(readFileSync(join(shims, 'claude-settings.json'), 'utf8'));
-    expect(Object.keys(settings.hooks).sort()).toEqual([
-      'Notification',
-      'SessionEnd',
-      'SessionStart',
-      'Stop',
-      'UserPromptSubmit',
-    ]);
-    expect(settings.hooks.Stop[0].hooks[0].command).toContain(join(shims, 'hook'));
+    expect(Object.keys(settings.hooks)).toEqual(['SessionStart']);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain(join(shims, 'hook'));
   });
 
   /** Ours would replace theirs, and a flag that silently stops working is worse. */
@@ -76,21 +70,13 @@ describe('Claude lifecycle hooks', () => {
     JSON.stringify({ session_id: id, hook_event_name: 'SessionStart', cwd: '/tmp' });
 
   it('records the conversation the agent says it is on', () => {
-    raw('hook', [''], true, payload('37ea38bf-39dd-4c33-a08a-798d9e04abf9'));
+    raw('hook', [], true, payload('37ea38bf-39dd-4c33-a08a-798d9e04abf9'));
     expect(currentId()).toBe('37ea38bf-39dd-4c33-a08a-798d9e04abf9');
-  });
-
-  it('records what the agent is doing, and clears it when there is no agent', () => {
-    raw('hook', ['working'], true, payload('a'));
-    expect(readFileSync(join(state, 'status'), 'utf8')).toBe('working');
-
-    raw('hook', ['clear'], true, payload('a'));
-    expect(existsSync(join(state, 'status'))).toBe(false);
   });
 
   /** Claude blocks on the hook's stdout. A broken hook must not be a dead tab. */
   it('answers Claude even with nowhere to write and nothing to read', () => {
-    expect(raw('hook', ['working'], false, 'not json at all')).toBe('{}');
+    expect(raw('hook', [], false, 'not json at all')).toBe('{}');
   });
 });
 

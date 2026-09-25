@@ -55,27 +55,6 @@ describe('workspace persistence', () => {
     expect(replayed).toContain('echo hi');
   });
 
-  it('clears agent state on restore rather than claiming work is still running', () => {
-    const original = new MockDriver();
-    const snapshot = original.snapshot().map((s) => ({
-      ...s,
-      tabs: Object.fromEntries(
-        Object.entries(s.tabs).map(([id, t]) => [id, { ...t, agentState: 'working' as const }]),
-      ),
-    }));
-
-    const restored = new MockDriver();
-    for (const s of restored.list()) restored.killSession(s.id);
-    restored.hydrate(snapshot, {});
-
-    const states = restored
-      .snapshot()
-      .flatMap((s) => Object.values(s.tabs).map((t) => t.agentState));
-    // Scripted tabs may start working again once respawned; what must not
-    // happen is inheriting a state from a process that no longer exists.
-    expect(states.every((state) => state === undefined || state === 'working')).toBe(true);
-  });
-
   it('trims scrollback to the budget it is given', () => {
     const original = new MockDriver();
     const tabId = Object.keys(original.list()[0].tabs)[0];

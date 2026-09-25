@@ -1,5 +1,5 @@
 import { SessionStore } from './store';
-import type { AgentState, DataHandler, Unsubscribe } from './types';
+import type { DataHandler, Unsubscribe } from './types';
 
 const C = {
   reset: '\x1b[0m',
@@ -15,7 +15,8 @@ const C = {
 interface Beat {
   after: number;
   text: string;
-  agentState?: AgentState;
+  /** The script stops here to ask something; return answers it. */
+  asks?: boolean;
   diff?: { files: number; added: number; removed: number };
 }
 
@@ -25,7 +26,7 @@ const banner = `${C.magenta}✻${C.reset} ${C.bold}Atrium${C.reset} ${C.dim}· O
 function agentScript(cwd: string, task: string, files: string[]): Beat[] {
   const beats: Beat[] = [
     { after: 300, text: `${prompt(cwd)}claude "${task}"\r\n\r\n` },
-    { after: 700, text: banner, agentState: 'working' },
+    { after: 700, text: banner },
     { after: 900, text: `  ${C.dim}Reading the surrounding code…${C.reset}\r\n` },
   ];
   let added = 0;
@@ -47,7 +48,6 @@ function agentScript(cwd: string, task: string, files: string[]): Beat[] {
     {
       after: 700,
       text: `${C.bold}Done.${C.reset} ${task} — ${files.length} files touched.\r\n\r\n`,
-      agentState: 'done',
     },
     { after: 200, text: prompt(cwd) },
   );
@@ -57,7 +57,7 @@ function agentScript(cwd: string, task: string, files: string[]): Beat[] {
 function waitingScript(cwd: string): Beat[] {
   return [
     { after: 300, text: `${prompt(cwd)}claude "migrate the auth flow"\r\n\r\n` },
-    { after: 800, text: banner, agentState: 'working' },
+    { after: 800, text: banner },
     { after: 900, text: `  ${C.dim}Tracing the current session handling…${C.reset}\r\n` },
     {
       after: 2400,
@@ -67,7 +67,7 @@ function waitingScript(cwd: string): Beat[] {
         `    the legacy admin path alone?\r\n\r\n` +
         `  ${C.dim}[1]${C.reset} Route both  ${C.dim}[2]${C.reset} Leave admin  ${C.dim}[3]${C.reset} Explain\r\n\r\n` +
         `  ${C.yellow}❯${C.reset} `,
-      agentState: 'waiting',
+      asks: true,
     },
   ];
 }
@@ -82,7 +82,7 @@ function devServerScript(cwd: string): Beat[] {
 
 function buildErrorScript(cwd: string): Beat[] {
   return [
-    { after: 300, text: `${prompt(cwd)}npm run build\r\n\r\n`, agentState: 'working' },
+    { after: 300, text: `${prompt(cwd)}npm run build\r\n\r\n` },
     { after: 900, text: `${C.dim}vite v8.3.0 building for production…${C.reset}\r\n` },
     { after: 1100, text: `${C.dim}transforming (218)…${C.reset}\r\n` },
     {
@@ -93,7 +93,6 @@ function buildErrorScript(cwd: string): Beat[] {
         `      ${C.dim}4 │${C.reset} export { PtyDriver } from ${C.green}'./session/pty'${C.reset}\r\n` +
         `        ${C.dim}│${C.reset}                          ${C.red}~~~~~~~~~~~~~~~${C.reset}\r\n\r\n` +
         `${C.red}error${C.reset} Build failed with 1 error.\r\n\r\n`,
-      agentState: 'error',
     },
     { after: 200, text: prompt(cwd) },
   ];
@@ -109,11 +108,13 @@ interface Stream {
  * A SessionDriver that never touches a process.
  *
  * Output is a pre-written script played back on timers, which is enough to
- * design against: real text, real ANSI colours, real status transitions, and
- * sessions that finish at different times so the rail actually moves.
+ * design against: real text, real ANSI colours, and sessions that finish at
+ * different times.
  */
 export class MockDriver extends SessionStore {
   private streams = new Map<string, Stream>();
+  /** Tabs whose script ended on a question, answered by pressing return. */
+  private asking = new Set<string>();
 
   constructor() {
     super();
@@ -176,17 +177,9 @@ export class MockDriver extends SessionStore {
       stream.timers.push(
         window.setTimeout(() => {
           this.emit(tabId, beat.text);
-          if (beat.agentState || beat.diff) {
-            this.update(sessionId, (session) => ({
-              ...session,
-              diff: beat.diff ?? session.diff,
-              tabs: beat.agentState
-                ? {
-                    ...session.tabs,
-                    [tabId]: { ...session.tabs[tabId], agentState: beat.agentState },
-                  }
-                : session.tabs,
-            }));
+          if (beat.asks) this.asking.add(tabId);
+          if (beat.diff) {
+            this.update(sessionId, (session) => ({ ...session, diff: beat.diff ?? session.diff }));
           }
         }, elapsed),
       );
@@ -221,6 +214,7 @@ export class MockDriver extends SessionStore {
   protected closeTerminal(tabId: string): void {
     this.streams.get(tabId)?.timers.forEach((t) => window.clearTimeout(t));
     this.streams.delete(tabId);
+    this.asking.delete(tabId);
   }
 
   attach(tabId: string, onData: DataHandler): Unsubscribe {
@@ -237,17 +231,13 @@ export class MockDriver extends SessionStore {
     // Echo like a PTY in canonical mode would, so typing feels real.
     this.emit(tabId, data === '\r' ? '\r\n' : data === '\x7f' ? '\b \b' : data);
 
-    if (data === '\r' && session.tabs[tabId].agentState === 'waiting') {
-      this.update(session.id, (s) => ({
-        ...s,
-        tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentState: 'working' } },
-      }));
+    if (data === '\r' && this.asking.has(tabId)) {
+      this.asking.delete(tabId);
       this.play(session.id, tabId, [
         { after: 500, text: `\r\n  ${C.dim}Understood — routing both call sites.${C.reset}\r\n` },
         {
           after: 1400,
           text: `  ${C.green}✔${C.reset} Edit ${C.cyan}src/auth/session.ts${C.reset}  ${C.green}+34${C.reset} ${C.red}-12${C.reset}\r\n\r\n`,
-          agentState: 'done',
           diff: { files: 1, added: 34, removed: 12 },
         },
         { after: 200, text: prompt(session.cwd) },
@@ -263,9 +253,6 @@ export class MockDriver extends SessionStore {
     const session = this.sessionOfTab(tabId);
     if (!session) return;
     this.emit(tabId, `^C\r\n${C.dim}Interrupted.${C.reset}\r\n\r\n${prompt(session.cwd)}`);
-    this.update(session.id, (s) => ({
-      ...s,
-      tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentState: undefined } },
-    }));
+    this.asking.delete(tabId);
   }
 }
