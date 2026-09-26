@@ -6,7 +6,6 @@ import { useHost } from './host/context';
 import { MockHost } from './host/mock';
 import type { Host } from './host/types';
 import { COMMANDS, matches } from './keyboard/commands';
-import { useAgentNotifications } from './notifications';
 import { SettingsProvider } from './settings/SettingsProvider';
 import { useSettings } from './settings/context';
 import { PaneTree } from './components/PaneTree';
@@ -69,8 +68,6 @@ function Workspace() {
       }),
     [driver],
   );
-
-  useAgentNotifications(sessions);
 
   // activeId is only a preference. Resolving it during render means a killed
   // session falls back to the next one without an effect round-trip.

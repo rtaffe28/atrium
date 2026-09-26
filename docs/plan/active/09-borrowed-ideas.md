@@ -30,13 +30,12 @@ HISTFILE from it. Ours held onto it and was quietly writing the user's shell
 history into a temp directory. Reading someone else's solution found a bug that
 testing had not.
 
-**Agent hooks, for state that is reported rather than inferred (cmux).** Taken.
-The shim hands `claude` a `--settings` file registering its lifecycle hooks, so
-a tab hears what its agent is doing, and which conversation it is on, from the
-agent. It replaced the last significant guess in the app and a heuristic that
-had already been wrong in a way that made the rail flicker — and it turned out
-to answer a second question too, since `SessionStart` fires for a conversation
-however it began. See [`12-agent-state.md`](12-agent-state.md).
+**Agent hooks, for state that is reported rather than inferred (cmux).** Taken,
+then mostly withdrawn. The hooks reported what the agent was doing, but only
+for Claude, and session state has been removed pending a redesign. What is
+kept is `SessionStart`, registered through a `--settings` file the shim hands
+`claude`: it fires for a conversation however it began, which is what makes
+restore reopen the right one. See [`12-agent-state.md`](12-agent-state.md).
 
 ## Worth taking next
 

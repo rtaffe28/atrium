@@ -1,14 +1,7 @@
 import { useEffect, useId, type RefObject } from 'react';
 import { useDrag } from '../dnd/context';
 import { resolveTabBarDrop } from '../dnd/zones';
-import type { AgentState, Session, TabGroup, TabKind } from '../session/types';
-
-const STATE_TITLE: Record<AgentState, string> = {
-  working: 'Working',
-  waiting: 'Needs your input',
-  done: 'Done',
-  error: 'Failed',
-};
+import type { Session, TabGroup, TabKind } from '../session/types';
 
 interface Props {
   /** Owned by PaneView, which needs the bar's height to place its split bands. */
@@ -69,12 +62,6 @@ export function TabBar({ barRef, session, group, onActivate, onClose, onAdd }: P
               }}
             >
               <span className={`tab-glyph glyph-${tab.kind}`} />
-              {tab.agentState && (
-                <span
-                  className={`tab-state state-${tab.agentState}`}
-                  title={STATE_TITLE[tab.agentState]}
-                />
-              )}
               <span className="tab-title">{tab.title}</span>
               <button
                 className="tab-close"

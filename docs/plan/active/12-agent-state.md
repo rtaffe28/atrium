@@ -1,10 +1,24 @@
 # Agent state: what a tab knows, and how well
 
-**Status: reported, for Claude tabs.** Claude Code's lifecycle hooks fire back
-into Atrium, so a tab running Claude knows what its agent is doing and which
-conversation it is on because the agent said so. The inference below is still
-there, and still what a codex tab or a plain command falls back to — but for a
-tab that reports, it is switched off entirely rather than blended with.
+**Status: removed, pending a redesign.** The rail, the tab bar and
+notifications no longer show whether a session is working, waiting or done.
+Three approaches were tried, and none was good enough to interrupt someone
+with:
+
+1. **Inferring it from output** (below): bytes arriving meant working, and a
+   quiet gap meant done. A spinner, a status line or a TUI repainting all read
+   as work, and any pause read as finished.
+2. **Claude's lifecycle hooks** (below): accurate, but only for Claude. Codex
+   and everything else fell back to the inference.
+3. **Watching every tab from outside:** its process tree, CPU time and a
+   headless copy of its screen, classified with a debounce and scoped to a
+   user-editable list of programs. It generalised across harnesses, but in
+   real use it raised too many false positives to notify on.
+
+What stays is the one hook that answers a different question. `SessionStart`
+still records which conversation a tab is on, because restore depends on it
+and nothing outside the agent can observe it. The rest of this document is
+the record of approaches 1 and 2, for whoever does the redesign.
 
 ## Where each state comes from
 

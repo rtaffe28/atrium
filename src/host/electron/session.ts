@@ -1,6 +1,5 @@
 import { SessionStore } from '../../session/store';
-import type { AgentState, DataHandler, Unsubscribe } from '../../session/types';
-import { newBellScan, scanForBell, type BellScan } from '../../session/bell';
+import type { DataHandler, Unsubscribe } from '../../session/types';
 import {
   newShellEventScan,
   scanShellEvents,
@@ -14,36 +13,6 @@ export interface RestoreInput {
   sessions: Session[];
   scrollback: Record<string, string>;
 }
-
-/** No output for this long after activity means the agent has stopped. */
-const SETTLE_MS = 1500;
-
-/**
- * What the hooks write, and what it means to the rail.
- *
- * `clear` removes the file rather than writing a state: a tab whose agent has
- * exited is not in any of these, it simply has no agent.
- */
-const REPORTED_STATES: Record<string, AgentState | undefined> = {
-  working: 'working',
-  done: 'done',
-  waiting: 'waiting',
-};
-
-/**
- * How long after a keystroke its echo may still be arriving.
- *
- * A pty echoes what is written to it, so typing produces output — and output
- * is the basis for "the agent is working". Without this, typing into a tab
- * made the agent look busy, and stopping typing rang the finished chime for
- * work nobody had started.
- *
- * This is not a guess about what the output means: we sent those bytes, so we
- * know. The only estimate is how long the round trip takes, and it only has to
- * outlast one keystroke's echo — a continuing typist keeps pushing the window
- * ahead of themselves.
- */
-const ECHO_MS = 250;
 
 /** How often to ask the ptys what is running in them. */
 const POLL_MS = 2000;
@@ -72,26 +41,8 @@ const SHELL_SETTLE_MS = 350;
 interface Stream {
   buffer: string;
   listeners: Set<DataHandler>;
-  settle: number;
   /** Carried across chunks: a sequence can be split between two reads. */
-  bell: BellScan;
   shell: ShellEventScan;
-  /**
-   * The agent rang and has not been answered.
-   *
-   * Latched rather than derived from the latest output, because an agent rings
-   * the bell and *then* prints its question — so the next chunk would
-   * immediately overwrite "needs you" with "working" and the state would never
-   * survive long enough to be useful.
-   */
-  awaitingHuman: boolean;
-  /**
-   * When the user last typed something that was not a submission.
-   *
-   * Editing a line is not the agent working, and the echo of it is not the
-   * agent's output. Submitting is a different matter, so it clears this.
-   */
-  typedAt: number;
 }
 
 /**
@@ -100,27 +51,13 @@ interface Stream {
  * All the session, tab and layout logic comes from SessionStore — none of it
  * cares whether a terminal is real. This class supplies only the terminal.
  *
- * ## How agent state is inferred
- *
- * A PTY gives bytes, not status, so state is read from the byte stream:
- *
- *   - **BEL** (0x07) means waiting. That is not a guess: ringing the terminal
- *     bell is the long-standing convention for "I need the human", and coding
- *     agents follow it.
- *   - **Output arriving** means working.
- *   - **Quiet after working** means done.
- *
- * Only tabs that were opened as agents get a state at all; a plain shell stays
- * blank rather than claiming to be "done" while sitting at a prompt. This is
- * a heuristic and it is worth replacing with something the agent reports
- * explicitly — an OSC sequence would do it — but it is honest about what the
- * bytes actually say.
+ * There is no session state (working, waiting, done) for now. Inferring it
+ * from output flickered, lifecycle hooks only covered Claude, and watching
+ * process activity raised too many false positives to notify on — see
+ * docs/plan/active/14-session-activity.md.
  */
 export class ElectronSessionDriver extends SessionStore {
   private streams = new Map<string, Stream>();
-  private agents = new Set<string>();
-  /** Tabs whose agent reports its own state, and so is never guessed at. */
-  private reporting = new Set<string>();
   /** Commands waiting to be typed into a freshly spawned shell. */
   private autorun = new Map<string, { command: string; timer: number }>();
   /** When each tab's shell started, so a Codex thread can be matched to it. */
@@ -146,12 +83,6 @@ export class ElectronSessionDriver extends SessionStore {
     this.shellName = shell.split('/').pop() ?? 'zsh';
     this.stateRoot = sessionState;
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
-    this.bridge.pty.onExit((tabId) => {
-      const stream = this.streams.get(tabId);
-      if (stream) stream.awaitingHuman = false;
-      this.setAgentState(tabId, undefined);
-      this.agents.delete(tabId);
-    });
 
     if (restore && restore.sessions.length > 0) {
       this.hydrate(restore.sessions, restore.scrollback);
@@ -202,18 +133,12 @@ export class ElectronSessionDriver extends SessionStore {
         const running = foreground[tab.id];
         if (!running) continue;
 
-        // Back at a prompt: whatever was reporting has gone, and the next
-        // thing to run here may be something that cannot.
-        if (running === this.shellName) {
-          this.reporting.delete(tab.id);
-          continue;
-        }
+        if (running === this.shellName) continue;
 
-        // What the agent has said about itself — which conversation it is on,
-        // and what it is doing. Without it a tab keeps the placeholder id it
-        // was born with, restore arms a resume for a conversation the agent
-        // has never heard of, and you get a new one instead of the one you
-        // left.
+        // Which conversation the agent says it is on. Without it a tab keeps
+        // the placeholder id it was born with, restore arms a resume for a
+        // conversation the agent has never heard of, and you get a new one
+        // instead of the one you left.
         void this.bridge.agent
           .report(tab.id)
           .then((report) => this.applyReport(tab.id, report))
@@ -266,11 +191,7 @@ export class ElectronSessionDriver extends SessionStore {
       stream = {
         buffer: '',
         listeners: new Set(),
-        settle: 0,
-        bell: newBellScan(),
         shell: newShellEventScan(),
-        awaitingHuman: false,
-        typedAt: 0,
       };
       this.streams.set(tabId, stream);
     }
@@ -294,42 +215,7 @@ export class ElectronSessionDriver extends SessionStore {
     stream.buffer += data;
     for (const listener of stream.listeners) listener(data);
 
-    const reported = this.applyShellEvents(tabId, data, stream);
-
-    if (!this.agents.has(tabId)) return;
-
-    // This tab's agent says what it is doing. Nothing below this line is
-    // better than that, and everything below it can contradict it.
-    if (this.reporting.has(tabId)) return;
-
-    if (scanForBell(data, stream.bell)) {
-      stream.awaitingHuman = true;
-      this.setAgentState(tabId, 'waiting');
-      window.clearTimeout(stream.settle);
-      return;
-    }
-
-    // Output after the bell is the agent explaining what it wants; it is not
-    // evidence that the agent stopped waiting. Only the human is.
-    if (stream.awaitingHuman) return;
-
-    // Our own keystrokes coming back. Leaving the state and the settle clock
-    // alone is the point: typing should neither start the agent working nor
-    // postpone the moment it is reported as finished.
-    if (stream.typedAt && Date.now() - stream.typedAt < ECHO_MS) return;
-
-    // The same chunk carried the shell reporting how the command ended, and
-    // the chunk is also, unavoidably, output. Inferring "working" from it
-    // would overwrite a fact with a guess a line later, and the guess would
-    // then settle to "done" — so a failed command reported itself correctly
-    // and was announced as a success 1.5 seconds afterwards.
-    if (reported) return;
-
-    // Working and done are inferred from whether bytes are arriving, which is
-    // a weaker thing than it looks — see docs/plan/active/12-agent-state.md.
-    this.setAgentState(tabId, 'working');
-    window.clearTimeout(stream.settle);
-    stream.settle = window.setTimeout(() => this.setAgentState(tabId, 'done'), SETTLE_MS);
+    this.applyShellEvents(tabId, data, stream);
   }
 
   /**
@@ -340,11 +226,9 @@ export class ElectronSessionDriver extends SessionStore {
    * character. Both produced wrong answers in practice. A shell that speaks
    * the integration protocol simply says what it ran and how it ended.
    */
-  private applyShellEvents(tabId: string, data: string, stream: Stream): boolean {
+  private applyShellEvents(tabId: string, data: string, stream: Stream): void {
     const session = this.sessionOfTab(tabId);
-    if (!session) return false;
-
-    let reported = false;
+    if (!session) return;
 
     for (const event of scanShellEvents(data, stream.shell)) {
       if (event.type === 'started' && event.command) {
@@ -380,34 +264,12 @@ export class ElectronSessionDriver extends SessionStore {
             ? s
             : { ...s, tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], title: this.shellName } } },
         );
-        if (event.type === 'finished' && this.agents.has(tabId)) {
-          // Reported by the shell, so this one is a fact: the command the tab
-          // was running has exited, with this status. It beats the settle
-          // clock, which is only ever a guess about the same thing.
-          window.clearTimeout(stream.settle);
-          reported = true;
-          if (!stream.awaitingHuman) {
-            this.setAgentState(tabId, event.exitCode === 0 ? 'done' : 'error');
-          }
-        }
       }
     }
-
-    return reported;
   }
 
-  /**
-   * Take the agent at its word.
-   *
-   * A reported status is not a better guess than the settle clock — it is a
-   * different kind of thing. Once a tab has produced one, the inference stops
-   * for that tab entirely: two answers to one question is how the rail came to
-   * flicker between "working" and "needs you" in the first place.
-   */
-  private applyReport(
-    tabId: string,
-    { sessionId, status }: { sessionId: string | null; status: string | null },
-  ): void {
+  /** Bind the tab to the conversation its agent says it is on. */
+  private applyReport(tabId: string, { sessionId }: { sessionId: string | null }): void {
     const session = this.sessionOfTab(tabId);
     if (!session) return;
 
@@ -417,21 +279,6 @@ export class ElectronSessionDriver extends SessionStore {
         tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentSessionId: sessionId } },
       }));
     }
-
-    const reported = REPORTED_STATES[status ?? ''];
-    if (!reported) return;
-    this.reporting.add(tabId);
-    window.clearTimeout(this.stream(tabId).settle);
-    this.setAgentState(tabId, reported);
-  }
-
-  private setAgentState(tabId: string, state: AgentState | undefined) {
-    const session = this.sessionOfTab(tabId);
-    if (!session || session.tabs[tabId]?.agentState === state) return;
-    this.update(session.id, (s) => ({
-      ...s,
-      tabs: { ...s.tabs, [tabId]: { ...s.tabs[tabId], agentState: state } },
-    }));
   }
 
   protected openTerminal(
@@ -441,7 +288,6 @@ export class ElectronSessionDriver extends SessionStore {
     restoring = false,
   ): void {
     const wanted = command?.trim();
-    if (wanted) this.agents.add(tabId);
 
     const tab = this.sessionOfTab(tabId)?.tabs[tabId];
     // Arm a resume only when the tab is being restored. The shim consumes the
@@ -474,13 +320,9 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   protected closeTerminal(tabId: string): void {
-    const stream = this.streams.get(tabId);
-    if (stream) window.clearTimeout(stream.settle);
     const queued = this.autorun.get(tabId);
     if (queued) window.clearTimeout(queued.timer);
     this.streams.delete(tabId);
-    this.agents.delete(tabId);
-    this.reporting.delete(tabId);
     this.autorun.delete(tabId);
     this.spawnedAt.delete(tabId);
     this.bridge.pty.kill(tabId);
@@ -510,23 +352,6 @@ export class ElectronSessionDriver extends SessionStore {
   }
 
   write(tabId: string, data: string): void {
-    const stream = this.stream(tabId);
-
-    // Submitting is the answer the agent was waiting for. Typing towards one
-    // is not: a tab that flips to "working" on the first character claims the
-    // agent is busy with a line the user has not finished writing, and it
-    // stops saying "needs you" while that is still the only true thing about
-    // it.
-    if (/[\r\n]/.test(data)) {
-      stream.typedAt = 0;
-      if (stream.awaitingHuman) {
-        stream.awaitingHuman = false;
-        this.setAgentState(tabId, 'working');
-      }
-    } else {
-      stream.typedAt = Date.now();
-    }
-
     // A real PTY echoes; unlike the mock we must not echo ourselves.
     this.bridge.pty.write(tabId, data);
   }

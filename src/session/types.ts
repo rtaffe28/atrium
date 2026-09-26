@@ -10,12 +10,6 @@
  * process. The UI must never learn the difference.
  */
 
-/** What an agent is doing right now. The rail exists to surface this. */
-export type AgentState = 'working' | 'waiting' | 'done' | 'error';
-
-/** A session's state is derived from its agent tabs — see deriveSessionState. */
-export type SessionState = AgentState | 'idle';
-
 export type TabKind = 'terminal' | 'browser';
 
 export interface Tab {
@@ -49,8 +43,6 @@ export interface Tab {
    * only after the tab has run codex once and written its rollout file.
    */
   codexSessionId?: string;
-  /** Terminal tabs running an agent. Drives the rail and notifications. */
-  agentState?: AgentState;
   /**
    * Where this terminal is now, as the shell reports it on every prompt.
    *
@@ -188,22 +180,4 @@ export interface SessionDriver {
    * when there is exactly one, and splits one off when there is not.
    */
   openLinkBeside(sessionId: string, groupId: string, url: string): void;
-}
-
-/**
- * A session is as urgent as its most urgent agent tab.
- *
- * "Needs input" outranks everything: it is the only state where the human is
- * the bottleneck, so it must win the rail's attention.
- */
-export function deriveSessionState(session: Session): SessionState {
-  const states = Object.values(session.tabs)
-    .map((t) => t.agentState)
-    .filter((s): s is AgentState => s !== undefined);
-
-  if (states.length === 0) return 'idle';
-  if (states.includes('waiting')) return 'waiting';
-  if (states.includes('working')) return 'working';
-  if (states.includes('error')) return 'error';
-  return 'done';
 }

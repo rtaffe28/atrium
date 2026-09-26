@@ -4,39 +4,6 @@ import { COMMANDS, display } from '../keyboard/commands';
 import { useSettings } from '../settings/context';
 import { FONT_SIZES } from '../settings/types';
 
-function Toggle({
-  checked,
-  onChange,
-  label,
-  hint,
-  disabled,
-}: {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  label: string;
-  hint?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <label className={`setting-row${disabled ? ' is-disabled' : ''}`}>
-      <span className="setting-text">
-        <span className="setting-label">{label}</span>
-        {hint && <span className="setting-hint">{hint}</span>}
-      </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        className={`switch${checked ? ' is-on' : ''}`}
-        onClick={() => onChange(!checked)}
-      >
-        <span className="switch-knob" />
-      </button>
-    </label>
-  );
-}
-
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { settings, update, reset } = useSettings();
   const host = useHost();
@@ -52,7 +19,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  const permission = host.notify.permission();
   const platform = host.window.platform();
 
   return (
@@ -87,51 +53,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               onChange={(event) => update({ defaultCommand: event.target.value })}
             />
           </label>
-        </section>
-
-        <section className="settings-section">
-          <h3>Alerts</h3>
-          <Toggle
-            label="Play sounds"
-            hint="A tone when an agent changes state."
-            checked={settings.sounds}
-            onChange={(sounds) => {
-              update({ sounds });
-              if (sounds) host.notify.sound('done'); // preview it immediately
-            }}
-          />
-          <Toggle
-            label="System notifications"
-            hint={
-              permission === 'granted'
-                ? undefined
-                : 'Needs permission — granted the first time one fires.'
-            }
-            checked={settings.notifications}
-            onChange={(notifications) => update({ notifications })}
-          />
-
-          <div className="setting-group">
-            <span className="setting-label">Alert me when an agent…</span>
-            <Toggle
-              label="Needs input"
-              checked={settings.notifyOn.waiting}
-              disabled={!settings.notifications && !settings.sounds}
-              onChange={(v) => update({ notifyOn: { ...settings.notifyOn, waiting: v } })}
-            />
-            <Toggle
-              label="Finishes"
-              checked={settings.notifyOn.done}
-              disabled={!settings.notifications && !settings.sounds}
-              onChange={(v) => update({ notifyOn: { ...settings.notifyOn, done: v } })}
-            />
-            <Toggle
-              label="Fails"
-              checked={settings.notifyOn.error}
-              disabled={!settings.notifications && !settings.sounds}
-              onChange={(v) => update({ notifyOn: { ...settings.notifyOn, error: v } })}
-            />
-          </div>
         </section>
 
         <section className="settings-section">

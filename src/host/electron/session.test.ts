@@ -5,10 +5,7 @@ import type { AtriumBridge } from './bridge';
 /** A bridge that records calls and lets a test decide what is running. */
 function fakeBridge() {
   let foreground: Record<string, string> = {};
-  let report: { sessionId: string | null; status: string | null } = {
-    sessionId: null,
-    status: null,
-  };
+  let report: { sessionId: string | null } = { sessionId: null };
   const spawned: Array<{ id: string; cwd: string }> = [];
   const written: Array<{ id: string; data: string }> = [];
   let onData: ((id: string, data: string) => void) | null = null;
@@ -50,8 +47,8 @@ function fakeBridge() {
     setForeground: (f: Record<string, string>) => {
       foreground = f;
     },
-    setReport: (next: { sessionId?: string; status?: string }) => {
-      report = { sessionId: null, status: null, ...next };
+    setReport: (next: { sessionId?: string }) => {
+      report = { sessionId: null, ...next };
     },
   };
 }
@@ -280,142 +277,6 @@ describe('restoring a captured command', () => {
     expect(replayed).toContain('after');
     expect(replayed, 'a replayed query would be answered into the shell').not.toContain('\x1b[c');
     expect(replayed, 'a replayed mode would re-arm focus reporting').not.toContain('[?1004h');
-    driver.dispose();
-  });
-});
-
-/**
- * The bug this covers: a pty echoes, so typing produced output, and output is
- * the evidence that an agent is working. Typing into a tab made the rail claim
- * the agent was busy, and pausing rang the "finished" chime for work nobody
- * had started.
- *
- * The wider weakness this only narrows — output is a poor proxy for progress,
- * and a spinner still reads as work — is recorded in
- * docs/plan/active/12-agent-state.md.
- */
-describe('typing is not the agent working', () => {
-  afterEach(() => vi.useRealTimers());
-
-  /** A restored agent tab, past the point where its command is typed in. */
-  function agentTab() {
-    const f = fakeBridge();
-    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE, {
-      sessions: [
-        {
-          id: 's1',
-          title: 'claude',
-          cwd: '~/work',
-          branch: 'main',
-          createdAt: 1,
-          diff: { files: 0, added: 0, removed: 0 },
-          layout: { type: 'leaf', groupId: 'g1' },
-          groups: { g1: { id: 'g1', tabIds: ['t1'], activeTabId: 't1' } },
-          tabs: { t1: { id: 't1', kind: 'terminal', title: 'claude', command: 'claude' } },
-        },
-      ],
-      scrollback: {},
-    });
-    const state = () => driver.list()[0].tabs.t1.agentState;
-    return { f, driver, state };
-  }
-
-  /**
-   * The rail flickered between "working" and "needs you" because output kept
-   * arriving after the agent had asked its question — a spinner redrawing is
-   * output, and output was the evidence of work. No refinement of which bytes
-   * count fixes that; the presence of output simply does not carry the
-   * information. So once the agent has said what it is doing, nothing else in
-   * this class gets a vote on the matter.
-   */
-  it('stops guessing once the agent reports for itself', async () => {
-    vi.useFakeTimers();
-    const { f, driver, state } = agentTab();
-
-    f.setForeground({ t1: '2.1.273' });
-    f.setReport({ sessionId: 'abc', status: 'waiting' });
-    await driver.refreshCommands();
-    expect(state()).toBe('waiting');
-
-    // The agent explaining what it wants, while it waits for the answer.
-    f.emit('t1', 'Do you want me to edit this file?\r\n');
-    vi.advanceTimersByTime(5000);
-    expect(state(), 'output is not a second opinion').toBe('waiting');
-    driver.dispose();
-  });
-
-  it('stays quiet while a keystroke echoes back', () => {
-    vi.useFakeTimers();
-    const { f, driver, state } = agentTab();
-
-    driver.write('t1', 'h');
-    f.emit('t1', 'h');
-    expect(state(), 'an echo is not the agent doing anything').toBeUndefined();
-
-    // And the settle clock was never started, so nothing announces a finish.
-    vi.advanceTimersByTime(5000);
-    expect(state()).toBeUndefined();
-    driver.dispose();
-  });
-
-  it('counts the line once it is submitted', () => {
-    vi.useFakeTimers();
-    const { f, driver, state } = agentTab();
-
-    driver.write('t1', 'fix the tests');
-    f.emit('t1', 'fix the tests');
-    expect(state()).toBeUndefined();
-
-    driver.write('t1', '\r');
-    f.emit('t1', 'thinking...');
-    expect(state(), 'submitting is what starts the work').toBe('working');
-
-    vi.advanceTimersByTime(2000);
-    expect(state()).toBe('done');
-    driver.dispose();
-  });
-
-  it('keeps saying "needs you" until the answer is actually sent', () => {
-    vi.useFakeTimers();
-    const { f, driver, state } = agentTab();
-
-    f.emit('t1', '\x07');
-    expect(state()).toBe('waiting');
-
-    driver.write('t1', 'y');
-    f.emit('t1', 'y');
-    expect(state(), 'a half-typed answer is still no answer').toBe('waiting');
-
-    driver.write('t1', '\r');
-    expect(state()).toBe('working');
-    driver.dispose();
-  });
-
-  it('lets real output through once the echo window has passed', () => {
-    vi.useFakeTimers();
-    const { f, driver, state } = agentTab();
-
-    driver.write('t1', 'x');
-    vi.advanceTimersByTime(400);
-    f.emit('t1', 'the agent, unprompted');
-    expect(state()).toBe('working');
-    driver.dispose();
-  });
-
-  it('prefers the shell reporting an exit over the settle clock', () => {
-    vi.useFakeTimers();
-    const { f, driver, state } = agentTab();
-
-    driver.write('t1', '\r');
-    f.emit('t1', 'building...');
-    expect(state()).toBe('working');
-
-    f.emit('t1', osc('133;D;1'));
-    expect(state(), 'a reported failure, not a guessed finish').toBe('error');
-
-    // The settle clock must not fire behind it and overwrite the report.
-    vi.advanceTimersByTime(5000);
-    expect(state()).toBe('error');
     driver.dispose();
   });
 });

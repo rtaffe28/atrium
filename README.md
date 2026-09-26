@@ -5,8 +5,10 @@ a rail of sessions, each a real terminal in a directory you choose.
 
 **Status: a working app, through stage 6.5 of 7.** Real processes on real
 pseudo-terminals, a frameless Electron window, zsh and bash shell integration,
-Claude lifecycle hooks reporting what each agent is doing, settings, and a
-workspace that survives a restart. What remains is stage 7: deciding what
+settings, and a workspace that survives a restart — each Claude tab bound to
+its conversation, so restore reopens the right one. Showing whether a session
+is working or finished is removed pending a redesign; see
+[`docs/plan/active/12-agent-state.md`](docs/plan/active/12-agent-state.md). What remains is stage 7: deciding what
 happens to running agents when the app quits.
 [`docs/plan/active/04-roadmap.md`](docs/plan/active/04-roadmap.md) has the
 stage-by-stage detail.

@@ -26,6 +26,10 @@ goes two deep.
 
 ## Session state is derived, never stored
 
+> **Removed for now.** Session state and the notifications below are taken
+> out pending a redesign; see `../active/12-agent-state.md`. This section and
+> the Notifications one describe how they worked.
+
 `deriveSessionState()` computes a session's state from its agent tabs:
 
     waiting  >  working  >  error  >  done  >  idle

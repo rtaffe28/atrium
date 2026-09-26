@@ -59,31 +59,21 @@ function makeDirectory(name: string): string {
 export const CLAUDE_SETTINGS = 'claude-settings.json';
 
 /**
- * Claude Code's lifecycle hooks, pointed back at us.
+ * Claude Code's SessionStart hook, pointed back at us.
  *
- * Four events, and between them a tab knows what its agent is doing without
- * anything being inferred from bytes on a screen:
- *
- *   SessionStart       which conversation this is, however it began
- *   UserPromptSubmit   a turn has started
- *   Stop               the turn is over
- *   Notification       the agent is asking for something
- *   SessionEnd         there is no agent here any more
+ * It says which conversation a tab is on, however that conversation began —
+ * new, --resume, --continue, the picker, or /resume inside a running session —
+ * which is what restore needs and nothing outside the agent can observe.
  *
  * `--settings` is an additional layer rather than a replacement, so the user's
  * own hooks still run; Claude concatenates the arrays.
  */
 function claudeSettings(hook: string): string {
-  const call = (status: string) => ({
-    hooks: [{ type: 'command', command: `${JSON.stringify(hook)} ${status}`, timeout: 5 }],
-  });
   return JSON.stringify({
     hooks: {
-      SessionStart: [call('')],
-      UserPromptSubmit: [call('working')],
-      Stop: [call('done')],
-      Notification: [call('waiting')],
-      SessionEnd: [call('clear')],
+      SessionStart: [
+        { hooks: [{ type: 'command', command: JSON.stringify(hook), timeout: 5 }] },
+      ],
     },
   });
 }

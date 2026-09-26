@@ -47,7 +47,7 @@ export interface AtriumBridge {
       resume: { claude?: string; codex?: string },
       cwd?: string,
     ): Promise<string>;
-    report(tabId: string): Promise<{ sessionId: string | null; status: string | null }>;
+    report(tabId: string): Promise<{ sessionId: string | null }>;
     newestCodexSession(since: number): Promise<string | null>;
   };
   files: {

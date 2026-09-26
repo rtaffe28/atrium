@@ -1,14 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDrag } from '../dnd/context';
-import { deriveSessionState, type Session, type SessionState } from '../session/types';
-
-const STATUS_LABEL: Record<SessionState, string> = {
-  idle: 'Idle',
-  working: 'Working',
-  waiting: 'Needs you',
-  done: 'Done',
-  error: 'Failed',
-};
+import type { Session } from '../session/types';
 
 function relativeTime(ts: number): string {
   const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
@@ -163,7 +155,6 @@ export function Sidebar({
       <ul className="session-list">
 
         {sessions.map((session) => {
-          const state = deriveSessionState(session);
           const tabCount = Object.keys(session.tabs).length;
           return (
             <li key={session.id}>
@@ -171,7 +162,6 @@ export function Sidebar({
                 className={`session-row${session.id === activeId ? ' is-active' : ''}`}
                 onClick={() => onSelect(session.id)}
               >
-                <span className={`dot dot-${state}`} aria-hidden />
                 <span className="session-body">
                   <span className="session-title">{session.title}</span>
                   <span className="session-meta">
@@ -193,7 +183,6 @@ export function Sidebar({
                     </span>
                   )}
                 </span>
-                <span className={`status-tag status-${state}`}>{STATUS_LABEL[state]}</span>
                 <button
                   className="session-kill"
                   title="Kill session"
