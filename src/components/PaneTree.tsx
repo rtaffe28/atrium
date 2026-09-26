@@ -1,5 +1,6 @@
 import type { FocusRequest } from '../focusRequest';
 import { useRef } from 'react';
+import { announceSettled } from '../layout/settle';
 import type { LayoutNode, Session, SessionDriver } from '../session/types';
 import { PaneView } from './PaneView';
 
@@ -62,6 +63,7 @@ export function PaneTree({ node, path, session, driver, onFocus, focusRequest }:
       splitter.removeEventListener('pointercancel', up);
       splitter.classList.remove('is-active');
       document.body.classList.remove('is-resizing', `is-resizing-${node.direction}`);
+      announceSettled();
     };
 
     document.body.classList.add('is-resizing', `is-resizing-${node.direction}`);

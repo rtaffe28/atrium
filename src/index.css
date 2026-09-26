@@ -480,11 +480,14 @@ kbd {
 
 /* ── pane body ───────────────────────────────────────────────────────── */
 
-.pane-body { flex: 1; min-height: 0; position: relative; display: flex; }
-.terminal-host { flex: 1; min-height: 0; padding: 8px 10px; }
+/* min-width: 0 all the way down, or a pane can grow but never shrink: a flex
+   item defaults to the width of its content, and a fitted terminal's content
+   is exactly its old width. */
+.pane-body { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; overflow: hidden; }
+.terminal-host { flex: 1; min-width: 0; min-height: 0; padding: 8px 10px; overflow: hidden; }
 .terminal-host .xterm { height: 100%; }
 
-.browser { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.browser { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .browser-bar {
   flex: 0 0 auto;
   display: flex;
@@ -517,7 +520,7 @@ kbd {
   outline: none;
 }
 .browser-url:focus { border-color: var(--accent); }
-.surface-host { flex: 1; min-height: 0; display: flex; }
+.surface-host { flex: 1; min-width: 0; min-height: 0; display: flex; }
 .surface-frame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
 /* <webview> is replaced content and collapses without an explicit size. */
 webview.surface-frame { display: inline-flex; }

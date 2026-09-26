@@ -6,6 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useHost } from '../host/context';
+import { isResizing, onSettled } from '../layout/settle';
 import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
 import type { SessionDriver } from '../session/types';
@@ -126,7 +127,7 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
     // split and splitter drag throws "ResizeObserver loop completed with
     // undelivered notifications".
     let frame = 0;
-    const observer = new ResizeObserver(() => {
+    const refit = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         try {
@@ -136,11 +137,17 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
           // Fires when the pane is hidden and has zero size.
         }
       });
+    };
+    // Mid-drag, wait for the release; see layout/settle.ts.
+    const observer = new ResizeObserver(() => {
+      if (!isResizing()) refit();
     });
     observer.observe(host);
+    const settled = onSettled(refit);
 
     return () => {
       cancelAnimationFrame(frame);
+      settled();
       observer.disconnect();
       typed.dispose();
       detach();
