@@ -263,6 +263,20 @@ app.whenReady().then(async () => {
     new Notification({ title: notice.title, body: notice.body, silent: true }).show();
   });
 
+  // A page in a browser tab asking for a new window — a Cmd/Ctrl-click on a
+  // link, or target=_blank — gets a tab beside it instead. The renderer owns
+  // the layout, so it is told which surface asked and places the tab itself.
+  // Nothing is ever allowed to open a real window.
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return;
+    contents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:/.test(url)) {
+        contents.hostWebContents?.send('surface:open', contents.id, url);
+      }
+      return { action: 'deny' };
+    });
+  });
+
   createWindow();
 
   app.on('activate', () => {

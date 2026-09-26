@@ -7,9 +7,11 @@ interface Props {
   tab: Tab;
   onNavigate: (url: string) => void;
   focusUrlBar?: boolean;
+  /** The page asked for a link in a new tab. */
+  onOpenLink?: (url: string) => void;
 }
 
-export function BrowserView({ tab, onNavigate, focusUrlBar }: Props) {
+export function BrowserView({ tab, onNavigate, focusUrlBar, onOpenLink }: Props) {
   const host = useHost();
   const surfaceKind = useCapability('browserSurface');
   const [draft, setDraft] = useState(tab.url ?? '');
@@ -37,8 +39,9 @@ export function BrowserView({ tab, onNavigate, focusUrlBar }: Props) {
       host.surfaces.subscribe(tab.id, (event) => {
         if (event.type === 'loading') setLoading(event.loading);
         if (event.type === 'url') onNavigate(event.url);
+        if (event.type === 'open') onOpenLink?.(event.url);
       }),
-    [host, tab.id, onNavigate],
+    [host, tab.id, onNavigate, onOpenLink],
   );
 
   if (surfaceKind === 'none') {

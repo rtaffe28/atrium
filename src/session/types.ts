@@ -181,6 +181,13 @@ export interface SessionDriver {
   moveTab(sessionId: string, tabId: string, action: DropAction): void;
   /** Persist a splitter drag. */
   setSizes(sessionId: string, path: number[], sizes: [number, number]): void;
+  /**
+   * Open `url` in a browser tab beside the pane holding `groupId`.
+   *
+   * What a Cmd- or Ctrl-click on a link does. Lands in the pane to the right
+   * when there is exactly one, and splits one off when there is not.
+   */
+  openLinkBeside(sessionId: string, groupId: string, url: string): void;
 }
 
 /**

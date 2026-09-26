@@ -2,6 +2,7 @@ import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useEffect, useId, useRef } from 'react';
 import { useDrag } from '../dnd/context';
 import { APPEND, resolvePaneZone } from '../dnd/zones';
+import { titleFromUrl } from '../session/store';
 import type { Session, SessionDriver, TabKind } from '../session/types';
 import { BrowserView } from './BrowserView';
 import { TabBar } from './TabBar';
@@ -51,6 +52,8 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
 
   if (!group) return null;
 
+  const openLink = (url: string) => driver.openLinkBeside(session.id, groupId, url);
+
   const activeTab = group.activeTabId ? session.tabs[group.activeTabId] : null;
   const splitPreview =
     action?.kind === 'split' && action.groupId === groupId ? action.edge : null;
@@ -70,7 +73,12 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
 
       <div className="pane-body">
         {activeTab?.kind === 'terminal' && (
-          <TerminalView tabId={activeTab.id} driver={driver} focusRequest={focusRequest} />
+          <TerminalView
+            tabId={activeTab.id}
+            driver={driver}
+            focusRequest={focusRequest}
+            onOpenLink={openLink}
+          />
         )}
         {activeTab?.kind === 'browser' && (
           <BrowserView
@@ -78,10 +86,11 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
             onNavigate={(url) =>
               driver.patchTab(session.id, activeTab.id, {
                 url,
-                title: url.replace(/^https?:\/\//, '').split('/')[0] || 'New tab',
+                title: titleFromUrl(url),
               })
             }
             focusUrlBar={claimFocus(focusRequest ?? null, activeTab.id)}
+            onOpenLink={openLink}
           />
         )}
         {!activeTab && <div className="empty">Empty pane</div>}

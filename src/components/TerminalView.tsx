@@ -1,9 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { claimFocus, type FocusRequest } from '../focusRequest';
+import { useHost } from '../host/context';
+import { isResizing, onSettled } from '../layout/settle';
+import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
 import type { SessionDriver } from '../session/types';
 
@@ -41,6 +45,8 @@ interface Props {
    * cannot honour it again and jump the cursor.
    */
   focusRequest?: FocusRequest | null;
+  /** A link was Cmd- or Ctrl-clicked. */
+  onOpenLink?: (url: string) => void;
 }
 
 /**
@@ -50,11 +56,18 @@ interface Props {
  * split, a tab move, or a session switch exercises exactly the path a real
  * driver uses to recover from a dropped connection.
  */
-export function TerminalView({ tabId, driver, focusRequest }: Props) {
+export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const { settings } = useSettings();
   const fontSize = settings.terminalFontSize;
+  const platform = useHost().window.platform();
+  // Read through a ref so a new callback each render does not tear down the
+  // terminal it is wired into.
+  const openLinkRef = useRef(onOpenLink);
+  useEffect(() => {
+    openLinkRef.current = onOpenLink;
+  });
 
   useEffect(() => {
     const host = hostRef.current;
@@ -69,12 +82,25 @@ export function TerminalView({ tabId, driver, focusRequest }: Props) {
       allowProposedApi: true,
       scrollback: 10_000,
       theme: THEME,
+      // OSC 8 hyperlinks — what agents print when a link's text is not its
+      // URL. Same rule as a bare URL below.
+      linkHandler: {
+        activate: (event, url) => follow(event, url),
+        allowNonHttpProtocols: false,
+      },
     });
+
+    // A plain click belongs to the terminal: selecting, and positioning the
+    // cursor in apps that take the mouse. Only the modifier makes it a link.
+    function follow(event: MouseEvent, url: string) {
+      if (isOpenLinkClick(event, platform)) openLinkRef.current?.(url);
+    }
 
     termRef.current = term;
 
     const fit = new FitAddon();
     term.loadAddon(fit);
+    term.loadAddon(new WebLinksAddon(follow));
     term.open(host);
 
     // WebGL is the fast path but fails on some Linux GPU drivers and in VMs.
@@ -101,7 +127,7 @@ export function TerminalView({ tabId, driver, focusRequest }: Props) {
     // split and splitter drag throws "ResizeObserver loop completed with
     // undelivered notifications".
     let frame = 0;
-    const observer = new ResizeObserver(() => {
+    const refit = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         try {
@@ -111,18 +137,24 @@ export function TerminalView({ tabId, driver, focusRequest }: Props) {
           // Fires when the pane is hidden and has zero size.
         }
       });
+    };
+    // Mid-drag, wait for the release; see layout/settle.ts.
+    const observer = new ResizeObserver(() => {
+      if (!isResizing()) refit();
     });
     observer.observe(host);
+    const settled = onSettled(refit);
 
     return () => {
       cancelAnimationFrame(frame);
+      settled();
       observer.disconnect();
       typed.dispose();
       detach();
       term.dispose();
       termRef.current = null;
     };
-  }, [tabId, driver, fontSize]);
+  }, [tabId, driver, fontSize, platform]);
 
   useEffect(() => {
     if (claimFocus(focusRequest ?? null, tabId)) termRef.current?.focus();

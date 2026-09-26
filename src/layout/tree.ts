@@ -86,3 +86,19 @@ export function leafGroupIds(root: LayoutNode): string[] {
   if (root.type === 'leaf') return [root.groupId];
   return [...leafGroupIds(root.children[0]), ...leafGroupIds(root.children[1])];
 }
+
+/**
+ * The pane directly to the right of `groupId`, if that is a single pane.
+ *
+ * "Directly" means the two are the halves of one row split. A pane beside a
+ * further split has no single neighbour to pick, so the answer is null and the
+ * caller splits instead of guessing.
+ */
+export function rightNeighbor(root: LayoutNode, groupId: string): string | null {
+  if (root.type === 'leaf') return null;
+  const [a, b] = root.children;
+  if (root.direction === 'row' && a.type === 'leaf' && a.groupId === groupId) {
+    return b.type === 'leaf' ? b.groupId : null;
+  }
+  return rightNeighbor(a, groupId) ?? rightNeighbor(b, groupId);
+}

@@ -83,6 +83,14 @@ const bridge = {
     save: (state: unknown): Promise<void> => ipcRenderer.invoke('workspace:save', state),
   },
 
+  surfaces: {
+    onOpen: (handler: (webContentsId: number, url: string) => void) => {
+      const listener = (_e: unknown, id: number, url: string) => handler(id, url);
+      ipcRenderer.on('surface:open', listener);
+      return () => ipcRenderer.off('surface:open', listener);
+    },
+  },
+
   window: {
     onState: (handler: (state: { focused: boolean; fullscreen: boolean }) => void) => {
       const listener = (_e: unknown, state: { focused: boolean; fullscreen: boolean }) =>
