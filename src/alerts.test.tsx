@@ -105,3 +105,47 @@ describe('the working tag', () => {
     expect(tagOn('Production build')).toBeNull();
   });
 });
+
+describe('the finished notification', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    localStorage.removeItem('atrium.settings.v1');
+  });
+
+  /** "WebGL renderer spike" runs a Claude turn in a session that is not in front. */
+  it('is posted when a tab you are not looking at stops working', () => {
+    const host = new MockHost();
+    vi.spyOn(host.notify, 'post').mockResolvedValue();
+    render(<App host={host} />);
+    act(() => vi.advanceTimersByTime(20000));
+
+    expect(host.notify.post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'WebGL renderer spike',
+        body: 'try the WebGL addon finished',
+      }),
+    );
+    const row = screen.getByText('WebGL renderer spike').closest('.session-row')!;
+    expect(row.querySelector('.attention-mark')).not.toBeNull();
+  });
+
+  it('is not posted, nor the tab marked, when it is turned off', () => {
+    localStorage.setItem('atrium.settings.v1', JSON.stringify({ notifyWhenFinished: false }));
+    const host = new MockHost();
+    vi.spyOn(host.notify, 'post').mockResolvedValue();
+    render(<App host={host} />);
+    act(() => vi.advanceTimersByTime(20000));
+
+    expect(host.notify.post).not.toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining('finished') }),
+    );
+    const row = screen.getByText('WebGL renderer spike').closest('.session-row')!;
+    expect(row.querySelector('.attention-mark')).toBeNull();
+  });
+});

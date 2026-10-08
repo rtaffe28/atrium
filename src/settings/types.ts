@@ -24,6 +24,11 @@ export interface Settings {
   desktopNotifications: boolean;
   /** Play a tone when a tab you are not looking at rings the bell. */
   bellSound: boolean;
+  /**
+   * Notify when a tab you are not looking at stops working — its Working
+   * tag goes out — unless its program just said so itself.
+   */
+  notifyWhenFinished: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCommand: 'claude',
   desktopNotifications: true,
   bellSound: false,
+  notifyWhenFinished: true,
 };
 
 export const FONT_SIZES = [11, 12, 13, 14, 16] as const;
