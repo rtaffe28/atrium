@@ -124,6 +124,18 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             }}
           />
           <Toggle
+            label="Notify when work finishes"
+            hint="When a tab you are not looking at stops working — unless its agent just notified you itself."
+            checked={settings.notifyWhenFinished}
+            disabled={!host.capabilities.nativeNotifications}
+            onChange={(on) => {
+              update({ notifyWhenFinished: on });
+              if (on && host.notify.permission() === 'default') {
+                void host.notify.requestPermission();
+              }
+            }}
+          />
+          <Toggle
             label="Bell sound"
             hint="When a tab you are not looking at rings. It is marked either way."
             checked={settings.bellSound}

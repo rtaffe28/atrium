@@ -5,7 +5,7 @@ or done. It shows what the program in each tab asks a terminal to show — a
 title, a bell, a notification, progress — exactly as Ghostty, iTerm2 and kitty
 do, and nothing else. A tab that says nothing shows nothing.
 
-## Why not a state machine
+## Why not a state machine of our own
 
 Three approaches to knowing what an agent was doing were built and taken out
 (`53c9ec7`):
@@ -46,6 +46,32 @@ The window also bounces the dock (macOS) or flashes its taskbar entry (Linux,
 Windows) for either kind of request, if it is in the background.
 
 None of this is saved. It described a process that died with the app.
+
+### Working → finished
+
+There is one state machine, and it decides nothing about *whether* a tab is
+working — that is `isWorking()`, read from what the program sent. It only
+watches that answer change, per tab, and reports the edge from working to not
+as `finished` (`SessionStore.trackWorking()`):
+
+- **It settles first.** The finish is held for 1.5 s and dropped if the tab is
+  working again by then, so a program dropping its spinner between two steps
+  is not a finish.
+- **It does not repeat the program.** If the tab's program sent a notification
+  or rang in the last 10 s — Codex at the end of every turn, Claude at a
+  permission prompt — that already said it.
+- **It is quiet for the tab in front of you**, like everything else here.
+- **An agent that exits mid-turn has finished too.** The shell coming back
+  takes the spinner down, and that is the same edge.
+
+What happens on a finish is the user's choice: *Notify when work finishes*,
+on by default, marks the tab and posts "<task> finished". Off, nothing
+happens at all. It is the only alert Atrium raises on its own observation
+rather than the program's request, which is why it has its own switch.
+
+Claude Code still sends its own "waiting for your input" after 60 s idle, so
+with both on a finished Claude turn notifies twice: at once from Atrium, and
+a minute later from Claude.
 
 ### What the agents actually send
 
@@ -106,7 +132,8 @@ tools) and for Claude if its list grows.
   `setFocusedTab()` and `onAlert()`; both drivers feed it every chunk,
   rendered or not, because a background tab is the one you need to hear from.
 - `src/alerts.ts` — passes requests to `host.notify`, and a click back to the
-  tab. There is no policy about *when*: the program decided that.
+  tab. For the program's requests there is no policy about *when*: the program
+  decided that. For `finished` it is the setting.
 - `src/components/TabBar.tsx`, `Sidebar.tsx` — the working tag and the marks.
 - `electron/main.ts` — native notifications that survive garbage collection
   long enough to be clicked, and the dock bounce.

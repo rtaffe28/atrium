@@ -115,7 +115,7 @@ function Workspace() {
     [driver, sessions],
   );
 
-  useTerminalAlerts(sessions, windowFocused, revealTab);
+  useTerminalAlerts(windowFocused, revealTab);
 
   const addTab = useCallback(
     (kind: TabKind) => {

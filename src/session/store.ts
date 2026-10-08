@@ -22,6 +22,23 @@ export function titleFromUrl(url: string): string {
 let counter = 0;
 export const uid = (prefix: string) => `${prefix}${++counter}`;
 
+/**
+ * How long a tab must stay not-working before it counts as finished.
+ *
+ * Working is read from a spinner in the title, and a program can drop it for
+ * a moment mid-task — between steps, or while it redraws. Waiting this long
+ * means a finish is a finish, not a gap between two frames.
+ */
+export const FINISH_SETTLE_MS = 1500;
+
+/**
+ * If the program itself asked for you this recently, its finishing says
+ * nothing new. Codex notifies when a turn ends and Claude when it needs a
+ * permission, either of which can land just before the spinner stops; one
+ * notification for one event is enough.
+ */
+export const FINISH_QUIET_MS = 10_000;
+
 /** A tab without what its program set, which described a run that is over. */
 function withoutTransient(tab: Tab): Tab {
   if (!TRANSIENT_TAB_FIELDS.some((field) => field in tab)) return tab;
@@ -71,6 +88,10 @@ export abstract class SessionStore implements SessionDriver {
   /** Per tab, because a sequence can be split between two reads. */
   private signalScans = new Map<string, SignalScan>();
   private focusedTabId: string | null = null;
+  /** Per tab: working as of the last change, and a pending finish. */
+  private working = new Map<string, { on: boolean; settle: ReturnType<typeof setTimeout> | null }>();
+  /** When each tab's program last asked for you itself. */
+  private lastRequest = new Map<string, number>();
 
   // ── subclass hooks ───────────────────────────────────────────────────────
 
@@ -261,8 +282,61 @@ export abstract class SessionStore implements SessionDriver {
     );
     if (changed) this.patchTab(session.id, tabId, patch);
 
-    for (const alert of alerts) {
-      for (const listener of this.alertListeners) listener(tabId, alert);
+    if (alerts.length > 0) this.lastRequest.set(tabId, Date.now());
+    for (const alert of alerts) this.emitAlert(tabId, alert);
+  }
+
+  private emitAlert(tabId: string, alert: Alert): void {
+    for (const listener of this.alertListeners) listener(tabId, alert);
+  }
+
+  /**
+   * The one state machine: each tab is working or it is not, and the edge
+   * from working to not is reported as `finished`.
+   *
+   * Working itself is never decided here — it is isWorking(), read from what
+   * the program sent. This only notices when that answer changes, holds a
+   * finish for FINISH_SETTLE_MS in case the program is merely between
+   * frames, and stays quiet when it would only repeat what the program
+   * already said or when you are looking at the tab.
+   */
+  private trackWorking(): void {
+    const present = new Set<string>();
+
+    for (const session of this.sessions.values()) {
+      for (const tab of Object.values(session.tabs)) {
+        if (tab.kind !== 'terminal') continue;
+        present.add(tab.id);
+        const now = isWorking(tab);
+        const entry = this.working.get(tab.id) ?? { on: false, settle: null };
+        this.working.set(tab.id, entry);
+        if (now === entry.on) continue;
+
+        entry.on = now;
+        if (entry.settle) {
+          clearTimeout(entry.settle);
+          entry.settle = null;
+        }
+        // Back to working before the finish settled: it never finished.
+        if (now) continue;
+
+        const tabId = tab.id;
+        entry.settle = setTimeout(() => {
+          entry.settle = null;
+          if (entry.on || !this.sessionOfTab(tabId)) return;
+          if (tabId === this.focusedTabId) return;
+          const asked = this.lastRequest.get(tabId);
+          if (asked !== undefined && Date.now() - asked < FINISH_QUIET_MS) return;
+          this.emitAlert(tabId, { type: 'finished' });
+        }, FINISH_SETTLE_MS);
+      }
+    }
+
+    for (const [tabId, entry] of this.working) {
+      if (present.has(tabId)) continue;
+      if (entry.settle) clearTimeout(entry.settle);
+      this.working.delete(tabId);
+      this.lastRequest.delete(tabId);
     }
   }
 
@@ -362,6 +436,7 @@ export abstract class SessionStore implements SessionDriver {
   }
 
   protected notify() {
+    this.trackWorking();
     const list = this.list();
     for (const listener of this.listeners) listener(list);
   }

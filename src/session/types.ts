@@ -69,8 +69,16 @@ export interface Tab {
 /** The tab fields a program set, which describe this run only. */
 export const TRANSIENT_TAB_FIELDS = ['progress', 'attention', 'programTitle'] as const;
 
-/** A request for the human, as the terminal received it. */
-export type Alert = { type: 'bell' } | { type: 'notify'; title: string; body: string };
+/**
+ * Something a tab you are not looking at wants you to know.
+ *
+ * `bell` and `notify` are requests the program made. `finished` is the tab
+ * going from working to not — see SessionStore.trackWorking().
+ */
+export type Alert =
+  | { type: 'bell' }
+  | { type: 'notify'; title: string; body: string }
+  | { type: 'finished' };
 
 /** A pane: one tab bar and whichever of its tabs is active. */
 export interface TabGroup {

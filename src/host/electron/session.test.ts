@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FINISH_QUIET_MS, FINISH_SETTLE_MS } from '../../session/store';
 import { ElectronSessionDriver } from './session';
 import type { AtriumBridge } from './bridge';
 
@@ -433,6 +434,97 @@ describe('what a program asks the terminal to show', () => {
     const tab = driver.list()[0].tabs.t1;
     expect(tab.attention).toBeUndefined();
     expect(tab.progress).toBeUndefined();
+    driver.dispose();
+  });
+});
+
+/**
+ * The state machine: a tab is working or it is not, and working → not is
+ * reported once, as `finished`, when it has really stopped.
+ */
+describe('finishing', () => {
+  afterEach(() => vi.useRealTimers());
+
+  const setup = () => {
+    vi.useFakeTimers();
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { tabId } = firstTerminalTab(driver);
+    const finished: string[] = [];
+    driver.onAlert((id, alert) => {
+      if (alert.type === 'finished') finished.push(id);
+    });
+    driver.setFocusedTab(null);
+    return { f, driver, tabId, finished };
+  };
+
+  it('is reported once the working tag has stayed out', () => {
+    const { f, driver, tabId, finished } = setup();
+    f.emit(tabId, osc('2;◐ Fix the bug'));
+    f.emit(tabId, osc('2;◑ Fix the bug'));
+    f.emit(tabId, osc('2;✳ Fix the bug'));
+
+    vi.advanceTimersByTime(FINISH_SETTLE_MS - 1);
+    expect(finished, 'not before it has settled').toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(finished).toEqual([tabId]);
+    driver.dispose();
+  });
+
+  it('is not a gap between two frames', () => {
+    const { f, driver, tabId, finished } = setup();
+    f.emit(tabId, osc('2;◐ Fix the bug'));
+    f.emit(tabId, osc('2;Fix the bug'));
+    vi.advanceTimersByTime(FINISH_SETTLE_MS / 2);
+    f.emit(tabId, osc('2;◑ Fix the bug'));
+    vi.advanceTimersByTime(FINISH_SETTLE_MS * 2);
+    expect(finished).toEqual([]);
+    driver.dispose();
+  });
+
+  it('is never reported for a tab that was not working', () => {
+    const { f, driver, tabId, finished } = setup();
+    f.emit(tabId, `${osc('2;vim')}${osc('133;D;0')}`);
+    vi.advanceTimersByTime(FINISH_SETTLE_MS * 2);
+    expect(finished).toEqual([]);
+    driver.dispose();
+  });
+
+  /** Codex notifies when its turn ends; one notification for one event. */
+  it('stays quiet when the program just said so itself', () => {
+    const { f, driver, tabId, finished } = setup();
+    f.emit(tabId, osc('2;⠧ probe'));
+    f.emit(tabId, osc('9;hi'));
+    f.emit(tabId, osc('2;probe'));
+    vi.advanceTimersByTime(FINISH_SETTLE_MS);
+    expect(finished).toEqual([]);
+
+    // A later turn, long after that notification, is reported as usual.
+    vi.advanceTimersByTime(FINISH_QUIET_MS);
+    f.emit(tabId, osc('2;⠧ probe'));
+    f.emit(tabId, osc('2;probe'));
+    vi.advanceTimersByTime(FINISH_SETTLE_MS);
+    expect(finished).toEqual([tabId]);
+    driver.dispose();
+  });
+
+  it('stays quiet for the tab in front of you', () => {
+    const { f, driver, tabId, finished } = setup();
+    driver.setFocusedTab(tabId);
+    f.emit(tabId, osc('2;◐ x'));
+    f.emit(tabId, osc('2;✳ x'));
+    vi.advanceTimersByTime(FINISH_SETTLE_MS);
+    expect(finished).toEqual([]);
+    driver.dispose();
+  });
+
+  /** The shell coming back is a finish too: an agent that crashed has stopped. */
+  it('is reported when the agent exits mid-turn', () => {
+    const { f, driver, tabId, finished } = setup();
+    f.emit(tabId, osc('2;◐ x'));
+    f.emit(tabId, osc('133;D;1'));
+    vi.advanceTimersByTime(FINISH_SETTLE_MS);
+    expect(finished).toEqual([tabId]);
     driver.dispose();
   });
 });

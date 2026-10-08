@@ -60,7 +60,9 @@ function agentScript(cwd: string, task: string, files: string[]): Beat[] {
       after: 700,
       text:
         `${C.bold}Done.${C.reset} ${task} — ${files.length} files touched.\r\n\r\n` +
-        `${idle(task)}${notify('Claude is waiting for your input')}`,
+        // Real Claude says nothing more for a minute: its own "waiting" notice
+        // comes after 60 s idle. Until then the tab simply stops working.
+        idle(task),
     },
     { after: 200, text: prompt(cwd) },
   );
