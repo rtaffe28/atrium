@@ -2,6 +2,7 @@ import { useEffect, useId, type RefObject } from 'react';
 import { useDrag } from '../dnd/context';
 import { resolveTabBarDrop } from '../dnd/zones';
 import type { Session, TabGroup, TabKind } from '../session/types';
+import { isWorking } from '../session/signals';
 
 interface Props {
   /** Owned by PaneView, which needs the bar's height to place its split bands. */
@@ -62,7 +63,12 @@ export function TabBar({ barRef, session, group, onActivate, onClose, onAdd }: P
               }}
             >
               <span className={`tab-glyph glyph-${tab.kind}`} />
-              <span className="tab-title">{tab.title}</span>
+              {/* The program's own title wins while it runs, as in any terminal. */}
+              <span className="tab-title">{tab.programTitle || tab.title}</span>
+              {tab.attention && (
+                <span className="attention-mark" title="Asked for your attention" />
+              )}
+              {isWorking(tab) && <span className="working-dot" title="Working" />}
               <button
                 className="tab-close"
                 title="Close tab"

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDrag } from '../dnd/context';
 import type { Session } from '../session/types';
+import { isWorking } from '../session/signals';
 
 function relativeTime(ts: number): string {
   const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
@@ -155,7 +156,12 @@ export function Sidebar({
       <ul className="session-list">
 
         {sessions.map((session) => {
-          const tabCount = Object.keys(session.tabs).length;
+          const tabs = Object.values(session.tabs);
+          const tabCount = tabs.length;
+          // Not a state of the session: just whatever its tabs are showing,
+          // so a request made in a session you are not in is not missed.
+          const attention = tabs.some((tab) => tab.attention);
+          const working = tabs.some(isWorking);
           return (
             <li key={session.id}>
               <div
@@ -163,7 +169,15 @@ export function Sidebar({
                 onClick={() => onSelect(session.id)}
               >
                 <span className="session-body">
-                  <span className="session-title">{session.title}</span>
+                  <span className="session-headline">
+                    <span className="session-title">{session.title}</span>
+                    {attention && (
+                      <span
+                        className="attention-mark"
+                        title="A tab in this session asked for your attention"
+                      />
+                    )}
+                  </span>
                   <span className="session-meta">
                     <span className="branch">{session.branch}</span>
                     <span className="sep">·</span>
@@ -183,6 +197,7 @@ export function Sidebar({
                     </span>
                   )}
                 </span>
+                {working && <span className="working-tag">Working</span>}
                 <button
                   className="session-kill"
                   title="Kill session"

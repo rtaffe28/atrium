@@ -10,6 +10,8 @@
  * process. The UI must never learn the difference.
  */
 
+import type { Progress } from './signals';
+
 export type TabKind = 'terminal' | 'browser';
 
 export interface Tab {
@@ -52,7 +54,23 @@ export interface Tab {
   cwd?: string;
   /** Browser tabs only. */
   url?: string;
+
+  // What the program in the tab has asked the terminal to show. Shown as it
+  // was sent and never inferred; none of it outlives the run — see signals.ts.
+
+  /** The last OSC 9;4 progress report, until it is taken away. */
+  progress?: Progress;
+  /** Rang the bell or posted a notification since you last looked at it. */
+  attention?: boolean;
+  /** The title the program set with OSC 0 or 2, until it exits. */
+  programTitle?: string;
 }
+
+/** The tab fields a program set, which describe this run only. */
+export const TRANSIENT_TAB_FIELDS = ['progress', 'attention', 'programTitle'] as const;
+
+/** A request for the human, as the terminal received it. */
+export type Alert = { type: 'bell' } | { type: 'notify'; title: string; body: string };
 
 /** A pane: one tab bar and whichever of its tabs is active. */
 export interface TabGroup {
@@ -180,4 +198,15 @@ export interface SessionDriver {
    * when there is exactly one, and splits one off when there is not.
    */
   openLinkBeside(sessionId: string, groupId: string, url: string): void;
+
+  /**
+   * The tab you are looking at: the active tab of the focused pane, in a
+   * focused window. Null when the window is in the background.
+   *
+   * A terminal does not alert for the tab in front of you, and looking at a
+   * tab is what clears its mark.
+   */
+  setFocusedTab(tabId: string | null): void;
+  /** A tab rang or posted a notification while you were looking elsewhere. */
+  onAlert(handler: (tabId: string, alert: Alert) => void): Unsubscribe;
 }

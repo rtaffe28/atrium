@@ -32,10 +32,11 @@ testing had not.
 
 **Agent hooks, for state that is reported rather than inferred (cmux).** Taken,
 then mostly withdrawn. The hooks reported what the agent was doing, but only
-for Claude, and session state has been removed pending a redesign. What is
-kept is `SessionStart`, registered through a `--settings` file the shim hands
-`claude`: it fires for a conversation however it began, which is what makes
-restore reopen the right one. See [`12-agent-state.md`](12-agent-state.md).
+for Claude. Tabs now show what any program sends its terminal, which is what
+Ghostty does and needs no hook per agent. What is kept is `SessionStart`,
+registered through a `--settings` file the shim hands `claude`: it fires for a
+conversation however it began, which is what makes restore reopen the right
+one. See [`12-agent-state.md`](12-agent-state.md).
 
 ## Worth taking next
 

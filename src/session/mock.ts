@@ -20,13 +20,24 @@ interface Beat {
   diff?: { files: number; added: number; removed: number };
 }
 
+/**
+ * What the real agents send their terminal, so the mock exercises the same
+ * path: a title, progress while a turn runs, and a notification at the end.
+ */
+const osc = (body: string) => `\x1b]${body}\x07`;
+const title = (text: string) => osc(`2;${text}`);
+/** Claude's title: a spinner while a turn runs, `✳` when it is waiting. */
+const busy = (task: string) => title(`◐ ${task}`);
+const idle = (task: string) => title(`✳ ${task}`);
+const notify = (body: string) => osc(`777;notify;Claude Code;${body}`);
+
 const prompt = (cwd: string) => `${C.dim}${cwd}${C.reset} ${C.green}❯${C.reset} `;
 const banner = `${C.magenta}✻${C.reset} ${C.bold}Atrium${C.reset} ${C.dim}· Opus 5${C.reset}\r\n\r\n`;
 
 function agentScript(cwd: string, task: string, files: string[]): Beat[] {
   const beats: Beat[] = [
     { after: 300, text: `${prompt(cwd)}claude "${task}"\r\n\r\n` },
-    { after: 700, text: banner },
+    { after: 700, text: `${busy(task)}${banner}` },
     { after: 900, text: `  ${C.dim}Reading the surrounding code…${C.reset}\r\n` },
   ];
   let added = 0;
@@ -47,21 +58,26 @@ function agentScript(cwd: string, task: string, files: string[]): Beat[] {
     { after: 1800, text: `  ${C.green}✔${C.reset} ${C.dim}47 passed, 0 failed${C.reset}\r\n\r\n` },
     {
       after: 700,
-      text: `${C.bold}Done.${C.reset} ${task} — ${files.length} files touched.\r\n\r\n`,
+      text:
+        `${C.bold}Done.${C.reset} ${task} — ${files.length} files touched.\r\n\r\n` +
+        `${idle(task)}${notify('Claude is waiting for your input')}`,
     },
     { after: 200, text: prompt(cwd) },
   );
   return beats;
 }
 
+const AUTH = 'migrate the auth flow';
+
 function waitingScript(cwd: string): Beat[] {
   return [
     { after: 300, text: `${prompt(cwd)}claude "migrate the auth flow"\r\n\r\n` },
-    { after: 800, text: banner },
+    { after: 800, text: `${busy(AUTH)}${banner}` },
     { after: 900, text: `  ${C.dim}Tracing the current session handling…${C.reset}\r\n` },
     {
       after: 2400,
       text:
+        `${idle(AUTH)}${notify('Claude needs your permission')}` +
         `  ${C.yellow}?${C.reset} Two call sites set the cookie directly.\r\n` +
         `    Route both through ${C.cyan}createSession()${C.reset}, or leave\r\n` +
         `    the legacy admin path alone?\r\n\r\n` +
@@ -92,7 +108,7 @@ function buildErrorScript(cwd: string): Beat[] {
         `    ${C.dim}src/session/index.ts:4:24${C.reset}\r\n` +
         `      ${C.dim}4 │${C.reset} export { PtyDriver } from ${C.green}'./session/pty'${C.reset}\r\n` +
         `        ${C.dim}│${C.reset}                          ${C.red}~~~~~~~~~~~~~~~${C.reset}\r\n\r\n` +
-        `${C.red}error${C.reset} Build failed with 1 error.\r\n\r\n`,
+        `${C.red}error${C.reset} Build failed with 1 error.\r\n\r\n\x07`,
     },
     { after: 200, text: prompt(cwd) },
   ];
@@ -167,6 +183,7 @@ export class MockDriver extends SessionStore {
     const stream = this.stream(tabId);
     stream.buffer += text;
     for (const listener of stream.listeners) listener(text);
+    this.receiveSignals(tabId, text);
   }
 
   private play(sessionId: string, tabId: string, script: Beat[]) {
@@ -234,13 +251,19 @@ export class MockDriver extends SessionStore {
     if (data === '\r' && this.asking.has(tabId)) {
       this.asking.delete(tabId);
       this.play(session.id, tabId, [
-        { after: 500, text: `\r\n  ${C.dim}Understood — routing both call sites.${C.reset}\r\n` },
+        {
+          after: 500,
+          text: `${busy(AUTH)}\r\n  ${C.dim}Understood — routing both call sites.${C.reset}\r\n`,
+        },
         {
           after: 1400,
           text: `  ${C.green}✔${C.reset} Edit ${C.cyan}src/auth/session.ts${C.reset}  ${C.green}+34${C.reset} ${C.red}-12${C.reset}\r\n\r\n`,
           diff: { files: 1, added: 34, removed: 12 },
         },
-        { after: 200, text: prompt(session.cwd) },
+        {
+          after: 200,
+          text: `${idle(AUTH)}${notify('Claude is waiting for your input')}${prompt(session.cwd)}`,
+        },
       ]);
     }
   }

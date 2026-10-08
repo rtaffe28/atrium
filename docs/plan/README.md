@@ -19,7 +19,7 @@ in one folder is a document sitting in the other.
 | [`08-packaging.md`](active/08-packaging.md) | macOS and Linux build and install; Windows unbuilt, signing unsolved |
 | [`09-borrowed-ideas.md`](active/09-borrowed-ideas.md) | what to take from VS Code and cmux next |
 | [`10-keyboard.md`](active/10-keyboard.md) | the binding table, and the palette that would reshape it |
-| [`12-agent-state.md`](active/12-agent-state.md) | session state: removed pending a redesign, and the three approaches that were tried |
+| [`12-agent-state.md`](active/12-agent-state.md) | tabs show what their program sends — title, bell, notification, progress — and nothing inferred |
 | [`13-dogfooding.md`](active/13-dogfooding.md) | what developing Atrium in Atrium has turned up, and what to do about it |
 
 ## completed/ — built, and now the reference

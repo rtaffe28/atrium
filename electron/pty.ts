@@ -88,19 +88,27 @@ export class PtyManager {
     const path = shims ? `${shims}:${this.env.PATH ?? ''}` : this.env.PATH;
     const startup = shellStartup(shell);
 
+    const env: NodeJS.ProcessEnv = {
+      ...this.env,
+      ...startup.env,
+      ...(options.env ?? {}),
+      ...(path ? { PATH: path } : {}),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      // Say which terminal this is. A dev run launched from Ghostty or iTerm
+      // otherwise hands its tabs that terminal's name, and agents switch on
+      // it — Claude picks its notification channel and its keyboard handling
+      // from TERM_PROGRAM, for a terminal that is not the one drawing them.
+      TERM_PROGRAM: 'Atrium',
+    };
+    delete env.TERM_PROGRAM_VERSION;
+
     const term = spawn(shell, [...(options.args ?? []), ...startup.args], {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd,
-      env: {
-        ...this.env,
-        ...startup.env,
-        ...(options.env ?? {}),
-        ...(path ? { PATH: path } : {}),
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-      },
+      env: env as Record<string, string>,
     });
 
     const entry: Entry = { pty: term, buffer: '' };

@@ -1,158 +1,117 @@
-# Agent state: what a tab knows, and how well
+# Agent state: show what the program says, the way a terminal does
 
-**Status: removed, pending a redesign.** The rail, the tab bar and
-notifications no longer show whether a session is working, waiting or done.
-Three approaches were tried, and none was good enough to interrupt someone
-with:
+**Status: built.** Atrium does not decide whether an agent is working, waiting
+or done. It shows what the program in each tab asks a terminal to show — a
+title, a bell, a notification, progress — exactly as Ghostty, iTerm2 and kitty
+do, and nothing else. A tab that says nothing shows nothing.
 
-1. **Inferring it from output** (below): bytes arriving meant working, and a
-   quiet gap meant done. A spinner, a status line or a TUI repainting all read
-   as work, and any pause read as finished.
-2. **Claude's lifecycle hooks** (below): accurate, but only for Claude. Codex
-   and everything else fell back to the inference.
-3. **Watching every tab from outside:** its process tree, CPU time and a
-   headless copy of its screen, classified with a debounce and scoped to a
-   user-editable list of programs. It generalised across harnesses, but in
-   real use it raised too many false positives to notify on.
+## Why not a state machine
 
-What stays is the one hook that answers a different question. `SessionStart`
-still records which conversation a tab is on, because restore depends on it
-and nothing outside the agent can observe it. The rest of this document is
-the record of approaches 1 and 2, for whoever does the redesign.
+Three approaches to knowing what an agent was doing were built and taken out
+(`53c9ec7`):
 
-## Where each state comes from
+1. **Inferring it from output.** Bytes arriving meant working; a quiet gap
+   meant done. A spinner, a status line or a repainting TUI all read as work,
+   and any pause read as finished. The rail flickered at the rate of the
+   animation, and the finished chime rang for it.
+2. **Claude's lifecycle hooks.** `UserPromptSubmit`, `Stop` and `Notification`
+   were accurate, and covered Claude only. Everything else fell back to (1).
+3. **Watching every tab from outside**: process tree, CPU time, a headless copy
+   of the screen. It generalised across agents and raised too many false
+   positives to notify on. The defining case: Claude starts a dev server and
+   ends its turn. The server keeps the process tree busy indefinitely; the
+   agent is idle.
 
-| State | Source | How good |
+All three asked Atrium to *classify* a tab, and every classifier is wrong
+somewhere. The best terminals never classify. Ghostty has no idea whether
+Claude is working; it draws the title Claude sets, raises the notification
+Claude sends, and that is the whole feature. It is never wrong, because it
+never claims anything the program did not.
+
+## What is shown, and what clears it
+
+| The program sends | Atrium shows | Until |
 |---|---|---|
-| any | Claude lifecycle hook | A report, from the process that knows. Supersedes everything below for that tab. |
-| `waiting` | BEL in the stream | A fact. Ringing is deliberate — a program that rings is asking for a human. |
-| `done` / `error` | OSC `133;D;n` | A fact. The shell announcing that the command exited, with its status. |
-| `working` | bytes are arriving | A guess. |
-| `done` | no bytes for 1.5s | A guess, and the same guess. |
+| OSC 0 / 2 — title | the tab's name | another title, or the shell is back (OSC 133 D / A) |
+| a spinner frame in that title, or OSC 9;4 progress | **Working** on the session in the rail, a dot on the tab | the spinner leaves the title, `9;4;0`, the shell is back — by its OSC 133 mark, or as the foreground process — or the pty exits |
+| BEL — a real one, not an OSC terminator | a mark on the tab and its session; a tone if *Bell sound* is on | you look at the tab |
+| OSC 9 / 777 / 99 — a notification | the same mark, and a desktop notification if *Desktop notifications* is on; clicking it opens the tab | you look at the tab |
 
-`session/bell.ts` separates a real bell from the BEL that merely terminates an
-OSC sequence, which is why the first row is trustworthy rather than merely
-plausible — treating every BEL as a bell made the rail flicker at exactly the
-rate an agent rewrote its window title.
+"Looking at" is the active tab of the focused pane in a focused window. That
+tab is never marked or notified for — a terminal does not interrupt you about
+the thing in front of you — and the moment you look at a marked tab, the mark
+goes. A wrong alert therefore costs one glance.
 
-## What is wrong with the inferred half
+The window also bounces the dock (macOS) or flashes its taskbar entry (Linux,
+Windows) for either kind of request, if it is in the background.
 
-**Output is a poor proxy for progress.** A terminal is not quiet while a
-program thinks. It is full of motion that says nothing about whether work is
-happening: a spinner, an elapsed-time counter, a progress bar, a status line
-redrawing, a TUI repainting on a resize. Every frame of a spinner is a chunk of
-output, so a thinking agent reads as *working*; every gap longer than the
-timeout reads as *done*. The rail oscillates at whatever rate the animation
-runs at, and the finished chime rings for it.
+None of this is saved. It described a process that died with the app.
 
-**Two narrower cases have been fixed, and they are worth recording because they
-are the same defect wearing different clothes.**
+### What the agents actually send
 
-*The echo.* A pty echoes what is written to it, so typing into a tab produced
-output, which read as the agent working; stopping typing read as it finishing.
-Fixed by ignoring output that arrives within `ECHO_MS` of a keystroke that was
-not a submission — and that fix is sound, because it is not a guess about what
-the output means. We sent those bytes, so we know. Only the round-trip time is
-estimated, and a continuing typist keeps pushing the window ahead of
-themselves. Submitting a line (`\r`) is treated differently: a half-typed
-answer is still no answer, so a tab goes on saying "needs you" until the line
-is actually sent.
+Measured from a raw pty with `TERM_PROGRAM=Atrium`, October 2026:
 
-*The report being overwritten by the guess.* A chunk carrying `OSC 133;D;1` is
-also, unavoidably, output. The inference ran on the same chunk and replaced the
-reported `error` with `working`, which settled to `done` 1.5 seconds later — so
-a failed command reported itself correctly and was then announced as a success.
-A chunk that carried a report no longer feeds the inference.
+| | Title | Notification | Progress |
+|---|---|---|---|
+| Claude Code 2.1.290 | `◐ <task>` spinning while a turn runs, `✳ <task>` when idle | OSC 777 at once for a permission prompt; after 60 s idle for "waiting for your input" | none — see below |
+| Codex 0.155.1 | braille spinner while working | OSC 9 when a turn ends, body = its last message; also on approval requests | none |
 
-**Neither of those fixes the spinner, and no version of this will.** The
-problem is not which bytes are excluded. It is that the presence of output does
-not carry the information being asked of it, so any answer derived from it is a
-coincidence that holds until it does not.
+So *working* is read from the one thing every agent already sends: the
+spinner it animates in its title while busy and removes when it stops. Atrium
+looks for the common frame sets — braille dots (Codex and most CLIs, through
+cli-spinners) and the rotating quarters `◐◑◒◓ ◴◵◶◷ ◰◱◲◳` (Claude) — rather than
+for any one agent, so a new agent that spins the usual way is covered without
+a change. `isWorking()` in `signals.ts` is the whole rule. An agent that does
+not animate its title and does not send OSC 9;4 shows no tag, which is the
+honest answer for a program that does not say.
 
-## What fixes it: asking the agent
+An agent that wants you is a notification it chose to send. The
+dev-server case from (3) shows an idle title and nothing else, which is true.
 
-It is the same move that shell integration made for command lines. A tab once
-recorded `2.1.273` as its command, from the foreground process name, because a
-process that renames itself will lie to anyone who infers rather than asks.
-Asking ended that class of bug. Asking ends this one.
+Claude's 60-second idle delay is Claude's: `messageIdleNotifThresholdMs` in
+`~/.claude.json`, not something `--settings` can set. A permission prompt is
+immediate.
 
-The shim hands `claude` a `--settings` file registering five hooks, each
-pointing at `electron/shell/hook.sh`:
+## What the shims turn on
 
-| Hook | Writes | Means |
-|---|---|---|
-| `SessionStart` | `current` | this is the conversation, however it began |
-| `UserPromptSubmit` | `status` = `working` | a turn has started |
-| `Stop` | `status` = `done` | the turn is over |
-| `Notification` | `status` = `waiting` | the agent is asking for something |
-| `SessionEnd` | removes `status` | there is no agent here any more |
+Neither agent sends notifications to a terminal it does not recognise by
+`TERM_PROGRAM`, so each is asked to, for that run only:
 
-Every hook runs inside the agent's own process tree, so `ATRIUM_SESSION_STATE`
-— exported into the tab's shell before anything starts — already says which tab
-it is. No pid resolution, no directory matching, nothing to get wrong. The
-files land in the directory the renderer already polls every two seconds, so
-there is no socket and no daemon.
+- **Claude**: `preferredNotifChannel: "ghostty"` in the `--settings` file the
+  shim already passes. That is OSC 777, title and body.
+- **Codex**: `-c tui.notifications=true -c tui.notification_method="osc9"
+  -c tui.notification_condition="always"`. *Always*, because Codex otherwise
+  only notifies when it believes it is unfocused, and Atrium already knows
+  which tab you are looking at. The user's `config.toml` is not touched.
 
-`--settings` adds a layer rather than replacing one, so the user's own hooks
-still run; Claude concatenates the arrays. If the user passes their own
-`--settings` the shim stands aside entirely, because ours would replace theirs
-and a flag that silently stops working is worse than a tab that reports
-nothing.
+Ptys get `TERM_PROGRAM=Atrium` and no `TERM_PROGRAM_VERSION`. A dev run started
+from Ghostty used to hand its tabs `TERM_PROGRAM=ghostty`, and agents choose
+their notification channel and keyboard handling from that.
 
-### What this also fixed
-
-`SessionStart` fires for a conversation **however it began** — new, `--resume`,
-`--continue`, the picker, or `/resume` inside a session already running. That
-last set is precisely what a wrapper around the command line cannot see, and
-not seeing it was a real bug: resuming a conversation by hand left the tab
-still bound to the one before it, and restore reopened the wrong one.
-
-The workaround for that — scanning `~/.claude/projects/<cwd>/` for the
-transcript being appended to — is **deleted**. It was inference, it could bind
-the wrong conversation when two tabs shared a directory, and the hook answers
-the same question exactly. Two answers to one question is how the rail came to
-flicker in the first place.
-
-### What cmux does
-
-The same thing, with a bigger machine around it. Its wrapper
-(`Resources/bin/cmux-claude-wrapper`, ~1,800 lines of bash) registers
-`SessionStart`, `Stop`, `SessionEnd`, `Notification`, `UserPromptSubmit`,
-`SubagentStop` and `PreToolUse` against its own Swift CLI, which talks to the
-app over a unix socket. It resolves *which pane* a hook came from by exporting
-`CMUX_CLAUDE_PID=$$` before `exec`, then mapping pid → controlling tty → pane;
-our per-tab state directory makes that step unnecessary. It also repoints
-`CLAUDE_CONFIG_DIR` on an explicit resume so a foreign config dir cannot turn a
-valid resume into "No conversation found" — worth remembering if Atrium ever
-sets that variable, which it does not.
-
-cmux is proprietary, so this was read for the idea and written fresh. The hook
-protocol itself is Claude Code's public interface and owes it nothing.
-
-## What is still inferred
-
-Codex, and anything else run by hand. Codex has no hook mechanism of this kind,
-so a codex tab still gets the output-timing guess and the flicker that comes
-with it. The question there is whether to keep inferring or to report nothing
-between the bell and the exit — which is the trade the section above used to
-frame, and is now a question about one agent rather than all of them.
-
-The inference is not dead code for another reason: a tab only stops guessing
-once its agent has actually reported. A Claude tab that has not said anything
-yet, or one running through a shell Atrium could not hook, still falls back.
+**Claude's progress bar is not available.** It emits OSC 9;4 only where
+`TERM_PROGRAM` is Ghostty ≥ 1.2 or iTerm ≥ 3.6.6, or a ConEmu variable is set;
+`terminalProgressBarEnabled` cannot override that. Impersonating either terminal
+would change far more of Claude's behaviour than its progress bar, so Atrium
+does not. Its spinner title carries the same information. OSC 9;4 still counts
+as working, for the tools that send it unconditionally (Pi, dnf5, Windows
+tools) and for Claude if its list grows.
 
 ## Where it lives
 
-- `electron/shell/hook.sh` — the hook itself; `electron/shims.ts` generates the
-  settings that register it, and `electron/shell/claude.sh` passes them on.
-- `electron/main.ts` — `agent:report`, one read of what a tab's agent has said.
-- `src/host/electron/session.ts` — `applyReport()` takes the agent at its word
-  and adds the tab to `reporting`, which is what `receive()` checks before
-  inferring anything; `receive()` holds the inference and its two exemptions;
-  `applyShellEvents()` handles the reported exit and tells `receive()` that it
-  did.
-- `src/session/bell.ts` — a real bell against an OSC terminator.
-- `src/session/shellEvents.ts` — the OSC 633/133 scanner.
-- `src/notifications.ts` — the policy for which transitions interrupt a human.
-- `src/session/mock.ts` — `MockDriver` plays scripted states, which is fine:
-  a mock is a design surface, not a measurement.
+- `src/session/signals.ts` — the scanner: one state machine over each tab's
+  raw output, so a sequence split between reads is not lost and a BEL ending
+  an OSC string is not a bell. It reads OSC 133 D / A too, so that a title
+  set on the way out and the prompt after it are taken in the order written.
+- `src/session/store.ts` — `receiveSignals()` puts what was sent on the tab,
+  `setFocusedTab()` and `onAlert()`; both drivers feed it every chunk,
+  rendered or not, because a background tab is the one you need to hear from.
+- `src/alerts.ts` — passes requests to `host.notify`, and a click back to the
+  tab. There is no policy about *when*: the program decided that.
+- `src/components/TabBar.tsx`, `Sidebar.tsx` — the working tag and the marks.
+- `electron/main.ts` — native notifications that survive garbage collection
+  long enough to be clicked, and the dock bounce.
+- `electron/shims.ts`, `electron/shell/codex.sh` — the switches above.
+
+`SessionStart` is still the one hook registered with Claude. It is not about
+state: it records which conversation a tab is on, which restore needs and
+nothing outside the agent can observe.

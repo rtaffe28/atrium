@@ -56,6 +56,8 @@ describe('Claude lifecycle hooks', () => {
 
     const settings = JSON.parse(readFileSync(join(shims, 'claude-settings.json'), 'utf8'));
     expect(Object.keys(settings.hooks)).toEqual(['SessionStart']);
+    // Claude only notifies terminals it knows by name. OSC 777 is one the tab reads.
+    expect(settings.preferredNotifChannel).toBe('ghostty');
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain(join(shims, 'hook'));
   });
 
@@ -134,15 +136,22 @@ describe('the claude shim', () => {
 });
 
 describe('the codex shim', () => {
-  /** Codex cannot be told an id, so a fresh run must be left entirely alone. */
-  it('leaves a new session untouched', () => {
-    expect(run('codex', ['--model', 'gpt-5'])).toBe('codex --model gpt-5');
+  const NOTIFY =
+    '-c tui.notifications=true -c tui.notification_method="osc9" ' +
+    '-c tui.notification_condition="always"';
+
+  /**
+   * Codex only notifies in terminals it recognises, and only when it thinks
+   * it is out of view. The tab decides that, so Codex is asked to always say.
+   */
+  it('asks Codex to notify the terminal, for this run only', () => {
+    expect(run('codex', ['--model', 'gpt-5'])).toBe(`codex ${NOTIFY} --model gpt-5`);
   });
 
   it('reopens the thread Atrium armed it with, once', () => {
     armResume('thread-7', 'resume-codex');
-    expect(run('codex')).toBe('codex resume thread-7');
-    expect(run('codex')).toBe('codex');
+    expect(run('codex')).toBe(`codex ${NOTIFY} resume thread-7`);
+    expect(run('codex')).toBe(`codex ${NOTIFY}`);
   });
 
   it('stays out of the way of a subcommand', () => {

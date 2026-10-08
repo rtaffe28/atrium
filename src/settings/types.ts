@@ -16,11 +16,21 @@ export interface Settings {
    * thing that differs per person.
    */
   defaultCommand: string;
+  /**
+   * Show a desktop notification when a tab you are not looking at asks for
+   * one. The program decides when to ask; this only decides whether the
+   * request reaches the desktop. The tab is marked either way.
+   */
+  desktopNotifications: boolean;
+  /** Play a tone when a tab you are not looking at rings the bell. */
+  bellSound: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   terminalFontSize: 13,
   defaultCommand: 'claude',
+  desktopNotifications: true,
+  bellSound: false,
 };
 
 export const FONT_SIZES = [11, 12, 13, 14, 16] as const;

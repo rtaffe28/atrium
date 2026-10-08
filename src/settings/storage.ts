@@ -14,8 +14,8 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<Settings> & Record<string, unknown>;
-    // Written by a version that had alerts for session state. There is no
-    // session state for now, so those keys are only dropped.
+    // Written by a version that inferred session state and alerted on it.
+    // Alerts now come from the programs themselves, under new keys.
     delete parsed.sounds;
     delete parsed.notifications;
     delete parsed.notifyOn;

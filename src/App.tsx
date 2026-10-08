@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTerminalAlerts } from './alerts';
 import { DragProvider } from './dnd/DragProvider';
 import type { DragPayload } from './dnd/context';
 import { HostProvider } from './host/HostProvider';
@@ -14,6 +15,11 @@ import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { requestFocus, type FocusRequest } from './focusRequest';
 import type { DropAction, Session, TabKind } from './session/types';
+
+/** How long the workspace must be still before it is saved. */
+const SAVE_DEBOUNCE_MS = 700;
+/** The longest a save waits for that while things keep changing. */
+const SAVE_MAX_WAIT_MS = 5000;
 
 export default function App({ host }: { host?: Host }) {
   // Swapping this one line for ElectronHost is the entire graduation from
@@ -79,6 +85,37 @@ function Workspace() {
     active && activeGroupId && active.groups[activeGroupId]
       ? activeGroupId
       : (active && Object.keys(active.groups)[0]) || null;
+
+  const [windowFocused, setWindowFocused] = useState(() =>
+    typeof document === 'undefined' ? true : document.hasFocus(),
+  );
+  useEffect(() => host.window.subscribe((state) => setWindowFocused(state.focused)), [host]);
+
+  // The tab in front of you, as a terminal means it: the active tab of the
+  // focused pane, in a window that has focus. It is never alerted for, and
+  // looking at a tab is what clears its mark.
+  const focusedTabId =
+    windowFocused && active && targetGroupId
+      ? (active.groups[targetGroupId]?.activeTabId ?? null)
+      : null;
+  useEffect(() => driver.setFocusedTab(focusedTabId), [driver, focusedTabId]);
+
+  /** Bring a tab to the front: its session, its pane, and the cursor. */
+  const revealTab = useCallback(
+    (tabId: string) => {
+      const session = sessions.find((s) => s.tabs[tabId]);
+      if (!session) return;
+      const group = Object.values(session.groups).find((g) => g.tabIds.includes(tabId));
+      if (!group) return;
+      driver.activateTab(session.id, group.id, tabId);
+      setActiveId(session.id);
+      setActiveGroupId(group.id);
+      setFocusRequest(requestFocus(tabId));
+    },
+    [driver, sessions],
+  );
+
+  useTerminalAlerts(sessions, windowFocused, revealTab);
 
   const addTab = useCallback(
     (kind: TabKind) => {
@@ -148,16 +185,29 @@ function Workspace() {
   // Persist the workspace shortly after it settles. Debounced because a
   // splitter drag fires a change per frame, and writing the whole workspace
   // sixty times a second would be absurd.
+  //
+  // But never put off for longer than SAVE_MAX_WAIT_MS. A working agent
+  // animates its title several times a second, every frame is a change, and a
+  // pure debounce would not save at all until the turn ended — a crash midway
+  // through a long run would lose everything done during it.
+  const pendingSince = useRef<number | null>(null);
   useEffect(() => {
     if (!host.capabilities.persistence || sessions.length === 0) return;
-    const timer = window.setTimeout(() => {
-      void host.workspace.save({
-        version: 1,
-        sessions: driver.snapshot(),
-        activeId: active?.id ?? null,
-        scrollback: driver.scrollback(host.workspace.scrollbackBudget),
-      });
-    }, 700);
+    const now = Date.now();
+    pendingSince.current ??= now;
+    const wait = Math.min(SAVE_DEBOUNCE_MS, pendingSince.current + SAVE_MAX_WAIT_MS - now);
+    const timer = window.setTimeout(
+      () => {
+        pendingSince.current = null;
+        void host.workspace.save({
+          version: 1,
+          sessions: driver.snapshot(),
+          activeId: active?.id ?? null,
+          scrollback: driver.scrollback(host.workspace.scrollbackBudget),
+        });
+      },
+      Math.max(0, wait),
+    );
     return () => window.clearTimeout(timer);
   }, [host, driver, sessions, active?.id]);
 
