@@ -6,7 +6,6 @@ import type {
   Capabilities,
   Host,
   NotifyDriver,
-  NotifyKind,
   Platform,
   Unsubscribe,
   WindowDriver,
@@ -16,11 +15,10 @@ import type { AtriumBridge, HostInfo } from './bridge';
 import { ElectronSessionDriver, type RestoreInput } from './session';
 import { WebviewSurfaces } from './surfaces';
 
-/** The chime generator is identical on every host; only delivery differs. */
-import { WebNotify } from '../mock/notify';
+/** The tone is identical on every host; only delivery differs. */
+import { bellTone } from '../mock/notify';
 
 class NativeNotify implements NotifyDriver {
-  private tones = new WebNotify();
   private bridge: AtriumBridge;
 
   constructor(bridge: AtriumBridge) {
@@ -35,16 +33,20 @@ class NativeNotify implements NotifyDriver {
     return 'granted';
   }
 
-  async post(notice: { kind: NotifyKind; title: string; body: string; tag: string }) {
-    await this.bridge.notify.post({
-      title: notice.title,
-      body: notice.body,
-      tag: notice.tag,
-    });
+  async post(notice: { title: string; body: string; tag: string }) {
+    await this.bridge.notify.post(notice);
   }
 
-  sound(kind: NotifyKind) {
-    this.tones.sound(kind);
+  bell() {
+    bellTone();
+  }
+
+  attention() {
+    this.bridge.notify.attention();
+  }
+
+  onClick(handler: (tag: string) => void): Unsubscribe {
+    return this.bridge.notify.onClick(handler);
   }
 }
 

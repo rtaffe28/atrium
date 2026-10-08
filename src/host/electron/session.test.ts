@@ -9,6 +9,7 @@ function fakeBridge() {
   const spawned: Array<{ id: string; cwd: string }> = [];
   const written: Array<{ id: string; data: string }> = [];
   let onData: ((id: string, data: string) => void) | null = null;
+  let onExit: ((id: string, code: number) => void) | null = null;
 
   const bridge = {
     info: vi.fn(),
@@ -27,7 +28,10 @@ function fakeBridge() {
         onData = handler;
         return () => {};
       },
-      onExit: () => () => {},
+      onExit: (handler: (id: string, code: number) => void) => {
+        onExit = handler;
+        return () => {};
+      },
     },
     agent: {
       prepareSession: vi.fn(async () => '/tmp/state'),
@@ -44,6 +48,7 @@ function fakeBridge() {
     spawned,
     written,
     emit: (id: string, data: string) => onData?.(id, data),
+    exit: (id: string) => onExit?.(id, 0),
     setForeground: (f: Record<string, string>) => {
       foreground = f;
     },
@@ -277,6 +282,157 @@ describe('restoring a captured command', () => {
     expect(replayed).toContain('after');
     expect(replayed, 'a replayed query would be answered into the shell').not.toContain('\x1b[c');
     expect(replayed, 'a replayed mode would re-arm focus reporting').not.toContain('[?1004h');
+    driver.dispose();
+  });
+});
+
+describe('what a program asks the terminal to show', () => {
+  const setup = () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { session, tabId } = firstTerminalTab(driver);
+    const tab = () => driver.list()[0].tabs[tabId];
+    const alerts: unknown[] = [];
+    driver.onAlert((id, alert) => alerts.push({ id, ...alert }));
+    return { f, driver, session, tabId, tab, alerts };
+  };
+
+  it('marks a tab that asked for you while you were elsewhere, and says so once', () => {
+    const { f, driver, tabId, tab, alerts } = setup();
+    driver.setFocusedTab(null);
+
+    f.emit(tabId, osc('777;notify;Claude Code;Claude needs your permission'));
+
+    expect(tab().attention).toBe(true);
+    expect(alerts).toEqual([
+      { id: tabId, type: 'notify', title: 'Claude Code', body: 'Claude needs your permission' },
+    ]);
+    driver.dispose();
+  });
+
+  /** A terminal does not interrupt you about the thing you are looking at. */
+  it('stays quiet for the tab in front of you', () => {
+    const { f, driver, tabId, tab, alerts } = setup();
+    driver.setFocusedTab(tabId);
+
+    f.emit(tabId, `\x07${osc('9;Codex: turn complete')}`);
+
+    expect(tab().attention).toBeUndefined();
+    expect(alerts).toEqual([]);
+    driver.dispose();
+  });
+
+  it('clears the mark when you look', () => {
+    const { f, driver, tabId, tab } = setup();
+    driver.setFocusedTab(null);
+    f.emit(tabId, '\x07');
+    expect(tab().attention).toBe(true);
+
+    driver.setFocusedTab(tabId);
+    expect(tab().attention).toBeUndefined();
+    driver.dispose();
+  });
+
+  /**
+   * The case process-watching got wrong: Claude starts a dev server and ends
+   * its turn. The server runs on, but Claude took its progress away, and that
+   * is all the tab shows.
+   */
+  it('shows progress exactly as long as the program says', () => {
+    const { f, driver, tabId, tab } = setup();
+
+    f.emit(tabId, osc('9;4;3;'));
+    expect(tab().progress).toEqual({ state: 'indeterminate' });
+    f.emit(tabId, 'VITE ready in 143 ms\r\n');
+    expect(tab().progress).toEqual({ state: 'indeterminate' });
+    f.emit(tabId, osc('9;4;0;'));
+    expect(tab().progress).toBeUndefined();
+    driver.dispose();
+  });
+
+  it('drops what a command set when the shell is back, or the pty is gone', () => {
+    const { f, driver, tabId, tab } = setup();
+
+    f.emit(tabId, `${osc('2;✳ Fix the bug')}${osc('9;4;1;30')}`);
+    expect(tab().programTitle).toBe('✳ Fix the bug');
+    f.emit(tabId, osc('133;D;130'));
+    expect(tab().programTitle).toBeUndefined();
+    expect(tab().progress).toBeUndefined();
+
+    f.emit(tabId, osc('9;4;3;'));
+    f.exit(tabId);
+    expect(tab().progress).toBeUndefined();
+    driver.dispose();
+  });
+
+  /**
+   * A shell without our integration never says the command ended. An agent
+   * that crashes mid-turn leaves its spinner up; the shell coming back to the
+   * front is what takes it down.
+   */
+  it('stops reading as working once the shell is back in front', async () => {
+    const { f, driver, tabId, tab } = setup();
+
+    f.emit(tabId, `${osc('2;◐ Fix the bug')}${osc('9;4;3;')}`);
+    f.setForeground({ [tabId]: 'claude' });
+    await driver.refreshCommands();
+    expect(tab().programTitle).toBe('◐ Fix the bug');
+
+    f.setForeground({ [tabId]: 'zsh' });
+    await driver.refreshCommands();
+    expect(tab().programTitle).toBeUndefined();
+    expect(tab().progress).toBeUndefined();
+
+    // A title the shell sets for itself is not the program's, and stays.
+    f.emit(tabId, osc('2;~/src/atrium'));
+    await driver.refreshCommands();
+    expect(tab().programTitle).toBe('~/src/atrium');
+    driver.dispose();
+  });
+
+  /** It described a process that died with the app. */
+  it('never saves any of it', () => {
+    const { f, driver, tabId } = setup();
+    driver.setFocusedTab(null);
+    f.emit(tabId, `${osc('2;t')}${osc('9;4;3;')}\x07`);
+
+    const saved = driver.snapshot()[0].tabs[tabId];
+    expect(saved).not.toHaveProperty('progress');
+    expect(saved).not.toHaveProperty('attention');
+    expect(saved).not.toHaveProperty('programTitle');
+    driver.dispose();
+  });
+
+  it('does not bring any of it back from a workspace that has it', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE, {
+      sessions: [
+        {
+          id: 's1',
+          title: 'x',
+          cwd: '~',
+          branch: 'main',
+          createdAt: 0,
+          diff: { files: 0, added: 0, removed: 0 },
+          layout: { type: 'leaf', groupId: 'g1' },
+          groups: { g1: { id: 'g1', tabIds: ['t1'], activeTabId: 't1' } },
+          tabs: {
+            t1: {
+              id: 't1',
+              kind: 'terminal',
+              title: 'zsh',
+              attention: true,
+              progress: { state: 'indeterminate' },
+            },
+          },
+        },
+      ],
+      scrollback: {},
+    });
+
+    const tab = driver.list()[0].tabs.t1;
+    expect(tab.attention).toBeUndefined();
+    expect(tab.progress).toBeUndefined();
     driver.dispose();
   });
 });

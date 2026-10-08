@@ -59,17 +59,24 @@ function makeDirectory(name: string): string {
 export const CLAUDE_SETTINGS = 'claude-settings.json';
 
 /**
- * Claude Code's SessionStart hook, pointed back at us.
+ * What Claude Code is told on every run in an Atrium tab.
  *
- * It says which conversation a tab is on, however that conversation began —
- * new, --resume, --continue, the picker, or /resume inside a running session —
- * which is what restore needs and nothing outside the agent can observe.
+ * The SessionStart hook says which conversation a tab is on, however that
+ * conversation began — new, --resume, --continue, the picker, or /resume
+ * inside a running session — which is what restore needs and nothing outside
+ * the agent can observe.
+ *
+ * The notification channel is how a tab hears that Claude wants you. Claude
+ * only picks one for itself in terminals it recognises by name, and Atrium is
+ * not one of them, so it is named here: `ghostty` is OSC 777, a title and a
+ * body, which the tab reads like any other notification — see signals.ts.
  *
  * `--settings` is an additional layer rather than a replacement, so the user's
  * own hooks still run; Claude concatenates the arrays.
  */
 function claudeSettings(hook: string): string {
   return JSON.stringify({
+    preferredNotifChannel: 'ghostty',
     hooks: {
       SessionStart: [
         { hooks: [{ type: 'command', command: JSON.stringify(hook), timeout: 5 }] },

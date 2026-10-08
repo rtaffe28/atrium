@@ -94,6 +94,9 @@ function createWindow() {
       fullscreen: window.isFullScreen(),
     });
   window.on('focus', emitState);
+  // A flashing taskbar entry keeps flashing on some desktops until told to
+  // stop; the dock bounce stops by itself.
+  window.on('focus', () => window.flashFrame(false));
   window.on('blur', emitState);
   window.on('enter-full-screen', emitState);
   window.on('leave-full-screen', emitState);
@@ -256,9 +259,44 @@ app.whenReady().then(async () => {
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
-  ipcMain.handle('notify:post', (_e, notice: { title: string; body: string; tag: string }) => {
+  /**
+   * The latest notification from each tab, held so it can still be clicked.
+   * One only referenced by the call that showed it can be collected while on
+   * screen, and its click handler goes with it — the click then does nothing.
+   *
+   * Keyed by tab rather than kept until dismissed, because macOS rarely says
+   * when a banner is dismissed: one that times out into Notification Center
+   * never emits `close`. A tab's newer notification replaces its older one,
+   * which also keeps one tab from stacking a pile of them.
+   */
+  const shown = new Map<string, Notification>();
+
+  ipcMain.handle('notify:post', (event, notice: { title: string; body: string; tag: string }) => {
     if (!Notification.isSupported()) return;
-    new Notification({ title: notice.title, body: notice.body, silent: true }).show();
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const notification = new Notification({ title: notice.title, body: notice.body });
+    shown.get(notice.tag)?.close();
+    shown.set(notice.tag, notification);
+    const forget = () => {
+      if (shown.get(notice.tag) === notification) shown.delete(notice.tag);
+    };
+    notification.on('close', forget);
+    notification.on('click', () => {
+      forget();
+      if (!window || window.isDestroyed()) return;
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+      window.webContents.send('notify:click', notice.tag);
+    });
+    notification.show();
+  });
+
+  ipcMain.on('notify:attention', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isFocused()) return;
+    if (process.platform === 'darwin') app.dock?.bounce('informational');
+    else window.flashFrame(true);
   });
 
   // A page in a browser tab asking for a new window — a Cmd/Ctrl-click on a

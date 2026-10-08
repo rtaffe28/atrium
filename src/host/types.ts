@@ -92,15 +92,26 @@ export interface FileDriver {
 
 // ── notifications ──────────────────────────────────────────────────────────
 
-export type NotifyKind = 'done' | 'waiting' | 'error';
-
+/**
+ * Getting the human's attention, the way a terminal does.
+ *
+ * What to say comes from the program in the tab; when to say it is the app's
+ * call. This is only delivery.
+ */
 export interface NotifyDriver {
   permission(): NotificationPermission;
   requestPermission(): Promise<NotificationPermission>;
-  /** Post a notification. Silent if permission was never granted. */
-  post(notice: { kind: NotifyKind; title: string; body: string; tag: string }): Promise<void>;
-  /** Play the alert tone for a state, independent of notification permission. */
-  sound(kind: NotifyKind): void;
+  /**
+   * A desktop notification. Silent if permission was never granted.
+   *
+   * `tag` comes back through onClick, which is how a click finds its tab.
+   */
+  post(notice: { title: string; body: string; tag: string }): Promise<void>;
+  /** The audible bell. */
+  bell(): void;
+  /** Ask for a look without words: a dock bounce, a flashing taskbar entry. */
+  attention(): void;
+  onClick(handler: (tag: string) => void): Unsubscribe;
 }
 
 // ── window ─────────────────────────────────────────────────────────────────

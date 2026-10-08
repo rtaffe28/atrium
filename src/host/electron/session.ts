@@ -51,10 +51,10 @@ interface Stream {
  * All the session, tab and layout logic comes from SessionStore — none of it
  * cares whether a terminal is real. This class supplies only the terminal.
  *
- * There is no session state (working, waiting, done) for now. Inferring it
- * from output flickered, lifecycle hooks only covered Claude, and watching
- * process activity raised too many false positives to notify on — see
- * docs/plan/active/14-session-activity.md.
+ * It does not decide whether an agent is working, waiting or done. It shows
+ * what the program in each tab asks a terminal to show — a bell, a
+ * notification, progress, a title — the way Ghostty does; see signals.ts and
+ * docs/plan/active/12-agent-state.md.
  */
 export class ElectronSessionDriver extends SessionStore {
   private streams = new Map<string, Stream>();
@@ -83,6 +83,7 @@ export class ElectronSessionDriver extends SessionStore {
     this.shellName = shell.split('/').pop() ?? 'zsh';
     this.stateRoot = sessionState;
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
+    this.bridge.pty.onExit((tabId) => this.programEnded(tabId));
 
     if (restore && restore.sessions.length > 0) {
       this.hydrate(restore.sessions, restore.scrollback);
@@ -133,7 +134,10 @@ export class ElectronSessionDriver extends SessionStore {
         const running = foreground[tab.id];
         if (!running) continue;
 
-        if (running === this.shellName) continue;
+        if (running === this.shellName) {
+          this.shellInFront(tab.id);
+          continue;
+        }
 
         // Which conversation the agent says it is on. Without it a tab keeps
         // the placeholder id it was born with, restore arms a resume for a
@@ -216,6 +220,7 @@ export class ElectronSessionDriver extends SessionStore {
     for (const listener of stream.listeners) listener(data);
 
     this.applyShellEvents(tabId, data, stream);
+    this.receiveSignals(tabId, data);
   }
 
   /**

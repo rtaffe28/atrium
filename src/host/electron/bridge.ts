@@ -53,7 +53,13 @@ export interface AtriumBridge {
   files: {
     choose(): Promise<string | null>;
   };
-  notify: { post(notice: { title: string; body: string; tag: string }): Promise<void> };
+  notify: {
+    post(notice: { title: string; body: string; tag: string }): Promise<void>;
+    /** Bounce the dock, or flash the taskbar entry, until the window is focused. */
+    attention(): void;
+    /** A posted notification was clicked; the window has already been raised. */
+    onClick(handler: (tag: string) => void): () => void;
+  };
   workspace: {
     load(): Promise<PersistedWorkspace | null>;
     save(state: PersistedWorkspace): Promise<void>;

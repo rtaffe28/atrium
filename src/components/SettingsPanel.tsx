@@ -4,6 +4,39 @@ import { COMMANDS, display } from '../keyboard/commands';
 import { useSettings } from '../settings/context';
 import { FONT_SIZES } from '../settings/types';
 
+function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={`setting-row${disabled ? ' is-disabled' : ''}`}>
+      <span className="setting-text">
+        <span className="setting-label">{label}</span>
+        {hint && <span className="setting-hint">{hint}</span>}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        className={`switch${checked ? ' is-on' : ''}`}
+        onClick={() => onChange(!checked)}
+      >
+        <span className="switch-knob" />
+      </button>
+    </label>
+  );
+}
+
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { settings, update, reset } = useSettings();
   const host = useHost();
@@ -73,6 +106,29 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               ))}
             </select>
           </label>
+        </section>
+
+        <section className="settings-section">
+          <h3>Alerts</h3>
+          <Toggle
+            label="Desktop notifications"
+            hint="When a tab you are not looking at asks for one — Claude and Codex do when they finish or need you."
+            checked={settings.desktopNotifications}
+            disabled={!host.capabilities.nativeNotifications}
+            onChange={(on) => {
+              update({ desktopNotifications: on });
+              // A browser only asks in response to a click, so this is the moment.
+              if (on && host.notify.permission() === 'default') {
+                void host.notify.requestPermission();
+              }
+            }}
+          />
+          <Toggle
+            label="Bell sound"
+            hint="When a tab you are not looking at rings. It is marked either way."
+            checked={settings.bellSound}
+            onChange={(on) => update({ bellSound: on })}
+          />
         </section>
 
         <section className="settings-section">

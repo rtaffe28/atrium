@@ -1,14 +1,17 @@
 import { leafGroupIds, removeLeaf, rightNeighbor, setSizesAt, splitLeaf } from '../layout/tree';
-import type {
-  CreateSessionOptions,
-  DataHandler,
-  DropAction,
-  LayoutNode,
-  Session,
-  SessionDriver,
-  Tab,
-  TabKind,
-  Unsubscribe,
+import { isWorking, newSignalScan, scanSignals, spins, type SignalScan } from './signals';
+import {
+  TRANSIENT_TAB_FIELDS,
+  type Alert,
+  type CreateSessionOptions,
+  type DataHandler,
+  type DropAction,
+  type LayoutNode,
+  type Session,
+  type SessionDriver,
+  type Tab,
+  type TabKind,
+  type Unsubscribe,
 } from './types';
 
 /** A browser tab's title before the page reports one: its host. */
@@ -18,6 +21,23 @@ export function titleFromUrl(url: string): string {
 
 let counter = 0;
 export const uid = (prefix: string) => `${prefix}${++counter}`;
+
+/** A tab without what its program set, which described a run that is over. */
+function withoutTransient(tab: Tab): Tab {
+  if (!TRANSIENT_TAB_FIELDS.some((field) => field in tab)) return tab;
+  const copy = { ...tab };
+  for (const field of TRANSIENT_TAB_FIELDS) delete copy[field];
+  return copy;
+}
+
+function withoutTransientTabs(session: Session): Session {
+  return {
+    ...session,
+    tabs: Object.fromEntries(
+      Object.entries(session.tabs).map(([id, tab]) => [id, withoutTransient(tab)]),
+    ),
+  };
+}
 
 /**
  * Push the id counter past every id in a restored workspace.
@@ -47,6 +67,10 @@ export function reserveIds(ids: Iterable<string>): void {
 export abstract class SessionStore implements SessionDriver {
   protected sessions = new Map<string, Session>();
   private listeners = new Set<(sessions: Session[]) => void>();
+  private alertListeners = new Set<(tabId: string, alert: Alert) => void>();
+  /** Per tab, because a sequence can be split between two reads. */
+  private signalScans = new Map<string, SignalScan>();
+  private focusedTabId: string | null = null;
 
   // ── subclass hooks ───────────────────────────────────────────────────────
 
@@ -74,7 +98,7 @@ export abstract class SessionStore implements SessionDriver {
 
   /** The workspace shape, ready to serialise. */
   snapshot(): Session[] {
-    return this.list();
+    return this.list().map(withoutTransientTabs);
   }
 
   /**
@@ -169,7 +193,7 @@ export abstract class SessionStore implements SessionDriver {
     );
 
     for (const session of sessions) {
-      this.sessions.set(session.id, this.sanitize(session));
+      this.sessions.set(session.id, this.sanitize(withoutTransientTabs(session)));
     }
     this.notify();
 
@@ -195,6 +219,95 @@ export abstract class SessionStore implements SessionDriver {
   /** Per-tab history, for the next snapshot. */
   scrollback(_budget: number): Record<string, string> {
     return {};
+  }
+
+  // ── what programs ask the terminal to show ──────────────────────────────
+
+  /**
+   * Act on the requests in a chunk of a tab's output.
+   *
+   * Called with everything a terminal tab prints, rendered or not: a tab in
+   * the background is exactly the one whose bell you need to hear about.
+   */
+  protected receiveSignals(tabId: string, chunk: string): void {
+    let scan = this.signalScans.get(tabId);
+    if (!scan) {
+      scan = newSignalScan();
+      this.signalScans.set(tabId, scan);
+    }
+    const signals = scanSignals(chunk, scan);
+    if (signals.length === 0) return;
+
+    const session = this.sessionOfTab(tabId);
+    const tab = session?.tabs[tabId];
+    if (!session || !tab) return;
+
+    const patch: Partial<Tab> = {};
+    const alerts: Alert[] = [];
+    for (const signal of signals) {
+      if (signal.type === 'progress') patch.progress = signal.progress ?? undefined;
+      else if (signal.type === 'title') patch.programTitle = signal.title || undefined;
+      else if (signal.type === 'ended') {
+        // Back at a prompt: whatever the command set described it, not this.
+        patch.progress = undefined;
+        patch.programTitle = undefined;
+      }
+      else if (tabId !== this.focusedTabId) alerts.push(signal);
+    }
+    if (alerts.length > 0) patch.attention = true;
+
+    const changed = (Object.keys(patch) as Array<keyof Tab>).some(
+      (key) => JSON.stringify(patch[key]) !== JSON.stringify(tab[key]),
+    );
+    if (changed) this.patchTab(session.id, tabId, patch);
+
+    for (const alert of alerts) {
+      for (const listener of this.alertListeners) listener(tabId, alert);
+    }
+  }
+
+  /**
+   * The pty is gone, and everything its programs set goes with it.
+   *
+   * A program that exits or crashes inside a live shell is handled by the
+   * shell's own marks (OSC 133) or, without them, by shellInFront().
+   */
+  protected programEnded(tabId: string): void {
+    const session = this.sessionOfTab(tabId);
+    const tab = session?.tabs[tabId];
+    if (!session || !tab || (tab.progress === undefined && tab.programTitle === undefined)) return;
+    this.patchTab(session.id, tabId, { progress: undefined, programTitle: undefined });
+  }
+
+  /**
+   * The shell is the foreground process again, so nothing in this tab is
+   * working: whatever spun its title or reported progress has exited.
+   *
+   * This is what stops an agent that crashed — and so never took its spinner
+   * down — from reading as working forever in a shell without our
+   * integration. A title the shell set itself is left alone; only one that
+   * still spins, which no shell at a prompt does, is dropped.
+   */
+  protected shellInFront(tabId: string): void {
+    const session = this.sessionOfTab(tabId);
+    const tab = session?.tabs[tabId];
+    if (!session || !tab || !isWorking(tab)) return;
+    this.patchTab(session.id, tabId, {
+      progress: undefined,
+      ...(spins(tab.programTitle) ? { programTitle: undefined } : {}),
+    });
+  }
+
+  setFocusedTab(tabId: string | null): void {
+    this.focusedTabId = tabId;
+    if (!tabId) return;
+    const session = this.sessionOfTab(tabId);
+    if (session?.tabs[tabId]?.attention) this.patchTab(session.id, tabId, { attention: undefined });
+  }
+
+  onAlert(handler: (tabId: string, alert: Alert) => void): Unsubscribe {
+    this.alertListeners.add(handler);
+    return () => this.alertListeners.delete(handler);
   }
 
   // ── construction ─────────────────────────────────────────────────────────
@@ -289,7 +402,10 @@ export abstract class SessionStore implements SessionDriver {
   killSession(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
-    for (const tabId of Object.keys(session.tabs)) this.closeTerminal(tabId);
+    for (const tabId of Object.keys(session.tabs)) {
+      this.closeTerminal(tabId);
+      this.signalScans.delete(tabId);
+    }
     this.sessions.delete(sessionId);
     this.notify();
   }
@@ -322,6 +438,7 @@ export abstract class SessionStore implements SessionDriver {
 
   closeTab(sessionId: string, tabId: string): void {
     this.closeTerminal(tabId);
+    this.signalScans.delete(tabId);
 
     const session = this.sessions.get(sessionId);
     if (!session) return;

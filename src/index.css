@@ -244,7 +244,9 @@ kbd {
 .session-row.is-active { background: var(--panel-raised); border-color: var(--border); }
 
 .session-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.session-headline { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .session-title {
+  min-width: 0;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -366,6 +368,7 @@ kbd {
 .tab-slot { display: flex; align-items: center; position: relative; }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -410,6 +413,40 @@ kbd {
   border-radius: 50%;
 }
 
+
+/* ── what a program asked the terminal to show ─────────────────────────── */
+
+/* A bell or a notification, until you look. */
+.attention-mark {
+  width: 6px; height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--yellow) 18%, transparent);
+}
+
+/* The program says it is working: a spinner in its title, or progress. */
+.working-tag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 1px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.working-dot {
+  width: 6px; height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: working-pulse 1.6s ease-in-out infinite;
+}
+@keyframes working-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .working-dot { animation: none; }
+}
 
 .tab-close {
   width: 16px; height: 16px;
@@ -625,6 +662,8 @@ webview.surface-frame { display: inline-flex; }
   padding: 7px 0;
 }
 
+.setting-row.is-disabled { opacity: 0.45; }
+
 .setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .setting-label { color: var(--text); }
 .setting-hint { font-size: 11px; color: var(--text-faint); }
@@ -666,6 +705,32 @@ webview.surface-frame { display: inline-flex; }
 }
 
 
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-high);
+  transition: background 140ms, border-color 140ms;
+}
+.switch.is-on { background: var(--accent); border-color: var(--accent); }
+.switch:disabled { cursor: not-allowed; }
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: transform 140ms, background 140ms;
+}
+.switch.is-on .switch-knob { transform: translateX(16px); background: #0d0f12; }
 
 /* ── shortcut list ───────────────────────────────────────────────────── */
 

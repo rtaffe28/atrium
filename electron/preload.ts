@@ -76,6 +76,12 @@ const bridge = {
   notify: {
     post: (notice: { title: string; body: string; tag: string }): Promise<void> =>
       ipcRenderer.invoke('notify:post', notice),
+    attention: () => ipcRenderer.send('notify:attention'),
+    onClick: (handler: (tag: string) => void) => {
+      const listener = (_e: unknown, tag: string) => handler(tag);
+      ipcRenderer.on('notify:click', listener);
+      return () => ipcRenderer.off('notify:click', listener);
+    },
   },
 
   workspace: {

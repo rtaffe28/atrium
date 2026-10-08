@@ -26,9 +26,10 @@ goes two deep.
 
 ## Session state is derived, never stored
 
-> **Removed for now.** Session state and the notifications below are taken
-> out pending a redesign; see `../active/12-agent-state.md`. This section and
-> the Notifications one describe how they worked.
+> **Replaced.** Session state and the notifications below were taken out, and
+> tabs now show what their program sends the terminal instead; see
+> `../active/12-agent-state.md`. This section and the Notifications one
+> describe how the old version worked.
 
 `deriveSessionState()` computes a session's state from its agent tabs:
 
