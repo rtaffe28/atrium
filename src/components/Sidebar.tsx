@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDrag } from '../dnd/context';
+import { useHost } from '../host/context';
 import type { Session } from '../session/types';
 import { isWorking } from '../session/signals';
 
@@ -111,6 +112,7 @@ export function Sidebar({
   onCancelRename,
 }: Props) {
   const { register, action } = useDrag();
+  const host = useHost();
   const railRef = useRef<HTMLElement>(null);
   const zoneId = useId();
 
@@ -300,7 +302,10 @@ export function Sidebar({
       {railActive && <div className="rail-drop-hint">Drop to start a new session</div>}
 
       <footer className="sidebar-foot">
-        <span className="dim">mock driver</span>
+        {/* Read from the host, as Settings does, so it says what is running:
+            the label used to be a literal left over from when the mock was
+            the only driver, and the installed app said "mock driver" too. */}
+        <span className="dim">{host.name} host</span>
         <span className="dim">⌘N new · ⌘, settings</span>
       </footer>
     </nav>
