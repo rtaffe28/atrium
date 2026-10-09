@@ -252,6 +252,22 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The title while it is being renamed. Sized to the line it replaces so the
+   row does not jump when the field appears. */
+.session-title-input {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  margin: -2px 0;
+  padding: 0 5px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+}
 .session-meta {
   display: flex;
   align-items: center;

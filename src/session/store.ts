@@ -485,6 +485,13 @@ export abstract class SessionStore implements SessionDriver {
     this.notify();
   }
 
+  renameSession(sessionId: string, title: string): void {
+    const trimmed = title.trim();
+    // A session with no name has nothing to be found by in the rail.
+    if (!trimmed) return;
+    this.update(sessionId, (session) => ({ ...session, title: trimmed }));
+  }
+
   // ── tabs ─────────────────────────────────────────────────────────────────
 
   addTab(sessionId: string, groupId: string, kind: TabKind): Tab {

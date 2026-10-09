@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from 'electron';
 import { readFile, writeFile, rename, readdir, stat, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
+import { menuTemplate } from './menu';
 import { PtyManager } from './pty';
 import { useBaseDirectory } from './shims';
 
@@ -312,6 +313,9 @@ app.whenReady().then(async () => {
       return { action: 'deny' };
     });
   });
+
+  // Before the window exists, so no key ever reaches the stock menu's Reload.
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform)));
 
   createWindow();
 

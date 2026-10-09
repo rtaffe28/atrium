@@ -183,6 +183,8 @@ export interface SessionDriver {
 
   createSession(options: CreateSessionOptions): Session;
   killSession(sessionId: string): void;
+  /** Give a session a new title. Blank is ignored. */
+  renameSession(sessionId: string, title: string): void;
 
   addTab(sessionId: string, groupId: string, kind: TabKind): Tab;
   closeTab(sessionId: string, tabId: string): void;
