@@ -84,3 +84,111 @@ describe('the new-session button', () => {
     expect(sessionCount()).toBe(before);
   });
 });
+
+const terminalFocused = () => Boolean((globalThis as Record<string, unknown>).__xtermFocused);
+const clearTerminalFocus = () => {
+  (globalThis as Record<string, unknown>).__xtermFocused = false;
+};
+
+describe('renaming a session', () => {
+  afterEach(cleanup);
+
+  const row = (title: string) => screen.getByText(title).closest('.session-row')!;
+  const field = () => screen.getByLabelText('Session name') as HTMLInputElement;
+
+  /** A real double-click is two clicks first, and the first one enters the session. */
+  function startRenaming(title: string) {
+    act(() => fireEvent.click(row(title)));
+    act(() => fireEvent.doubleClick(row(title)));
+  }
+
+  it('turns the title into a field on a double-click, ready to type over', () => {
+    render(<App />);
+    startRenaming('Auth flow migration');
+
+    expect(field().value).toBe('Auth flow migration');
+    expect(document.activeElement).toBe(field());
+  });
+
+  it('keeps the name on Enter and puts the cursor back in the terminal', () => {
+    render(<App />);
+    startRenaming('Auth flow migration');
+    clearTerminalFocus();
+
+    act(() => {
+      fireEvent.change(field(), { target: { value: 'Login rewrite' } });
+      fireEvent.keyDown(field(), { key: 'Enter' });
+    });
+
+    expect(screen.queryByLabelText('Session name')).toBeNull();
+    expect(screen.getByText('Login rewrite')).toBeTruthy();
+    expect(screen.queryByText('Auth flow migration')).toBeNull();
+    expect(terminalFocused(), 'Enter should leave you typing in the session').toBe(true);
+  });
+
+  it('keeps the name when the field loses focus', () => {
+    render(<App />);
+    startRenaming('Auth flow migration');
+
+    act(() => {
+      fireEvent.change(field(), { target: { value: 'Login rewrite' } });
+      fireEvent.blur(field());
+    });
+
+    expect(screen.queryByLabelText('Session name')).toBeNull();
+    expect(screen.getByText('Login rewrite')).toBeTruthy();
+  });
+
+  it('throws the name away on Escape', () => {
+    render(<App />);
+    startRenaming('Auth flow migration');
+
+    act(() => {
+      fireEvent.change(field(), { target: { value: 'Login rewrite' } });
+      fireEvent.keyDown(field(), { key: 'Escape' });
+    });
+
+    expect(screen.queryByLabelText('Session name')).toBeNull();
+    expect(screen.getByText('Auth flow migration')).toBeTruthy();
+    expect(screen.queryByText('Login rewrite')).toBeNull();
+  });
+
+  it('leaves the title alone when the name is blank', () => {
+    render(<App />);
+    startRenaming('Auth flow migration');
+
+    act(() => {
+      fireEvent.change(field(), { target: { value: '   ' } });
+      fireEvent.keyDown(field(), { key: 'Enter' });
+    });
+
+    expect(screen.queryByLabelText('Session name')).toBeNull();
+    expect(screen.getByText('Auth flow migration')).toBeTruthy();
+  });
+
+  it('renames the session you are in from the keyboard', () => {
+    render(<App />);
+    act(() => fireEvent.click(row('Auth flow migration')));
+
+    // Shift held, so the browser reports the key as a capital.
+    act(() => fireEvent.keyDown(window, { key: 'R', metaKey: true, shiftKey: true }));
+
+    expect(field().value).toBe('Auth flow migration');
+    expect(document.activeElement).toBe(field());
+  });
+
+  /**
+   * The field sits on the row, and clicking the row enters the session —
+   * which would yank the cursor into the terminal mid-word.
+   */
+  it('does not enter the session when the field itself is clicked', () => {
+    render(<App />);
+    startRenaming('Auth flow migration');
+    clearTerminalFocus();
+
+    act(() => fireEvent.click(field()));
+
+    expect(terminalFocused()).toBe(false);
+    expect(screen.getByLabelText('Session name')).toBeTruthy();
+  });
+});

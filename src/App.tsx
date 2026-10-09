@@ -43,6 +43,8 @@ function Workspace() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** The session whose title is being edited in the rail, if any. */
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   /**
    * The tab that should take keyboard focus.
    *
@@ -182,6 +184,25 @@ function Workspace() {
     [sessions],
   );
 
+  /**
+   * A rename is over, kept or not. The field took the cursor out of the
+   * terminal; pressing Enter on a name should leave you typing in the session
+   * again, not sitting on its row.
+   */
+  const finishRename = useCallback(() => {
+    setRenamingId(null);
+    const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
+    if (tabId) setFocusRequest(requestFocus(tabId));
+  }, [active, targetGroupId]);
+
+  const renameSession = useCallback(
+    (id: string, title: string) => {
+      driver.renameSession(id, title);
+      finishRename();
+    },
+    [driver, finishRename],
+  );
+
   // Persist the workspace shortly after it settles. Debounced because a
   // splitter drag fires a change per frame, and writing the whole workspace
   // sixty times a second would be absurd.
@@ -221,6 +242,9 @@ function Workspace() {
   useEffect(() => {
     const run: Record<string, () => void> = {
       'session.new': createSession,
+      'session.rename': () => {
+        if (active) setRenamingId(active.id);
+      },
       'tab.newTerminal': () => addTab('terminal'),
       'tab.close': () => {
         const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
@@ -256,6 +280,10 @@ function Workspace() {
             onCreate={createSession}
             onCreateShell={createShellSession}
             onKill={(id) => driver.killSession(id)}
+            renamingId={renamingId}
+            onBeginRename={setRenamingId}
+            onRename={renameSession}
+            onCancelRename={finishRename}
           />
           {/* Double-clicking the empty workspace opens a session — the same
               gesture as an empty desktop or a browser's tab strip. */}

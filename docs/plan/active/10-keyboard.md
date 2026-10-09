@@ -10,13 +10,20 @@ and described again in a panel is two things that drift.
 | Command | Binding | Group |
 |---|---|---|
 | New session | `Mod+N` | Sessions |
+| Rename session | `Mod+Shift+R` | Sessions |
 | New terminal tab | `Mod+T` | Tabs |
 | Close tab | `Mod+W` | Tabs |
 | Settings | `Mod+,` | Application |
 
 `Mod` is the platform's command key, so a binding is written once and rendered
 as `⌘N` on macOS and `Ctrl+N` elsewhere. A test asserts no two commands claim
-the same keys.
+the same keys. Rename is also a double-click on the session's row.
+
+Electron's own menu is the other claimant on the keyboard. Its default binds
+Reload to `Mod+R` and Force Reload to `Mod+Shift+R`, and a reload here throws
+away the renderer every terminal lives in. The menu is built in
+`electron/menu.ts` from the same roles without those two, and a test keeps them
+out.
 
 ## The rule that constrains everything here
 

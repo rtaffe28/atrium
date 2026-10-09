@@ -12,6 +12,7 @@ import type { Platform } from '../host/types';
  */
 export type CommandId =
   | 'session.new'
+  | 'session.rename'
   | 'tab.newTerminal'
   | 'tab.close'
   | 'settings.open';
@@ -27,6 +28,9 @@ export interface Command {
 
 export const COMMANDS: Command[] = [
   { id: 'session.new', label: 'New session', keys: 'Mod+N', group: 'Sessions' },
+  // Shifted so that on Windows and Linux it is not Ctrl+R, the shell's own
+  // history search — see the rule in docs/plan/active/10-keyboard.md.
+  { id: 'session.rename', label: 'Rename session', keys: 'Mod+Shift+R', group: 'Sessions' },
   { id: 'tab.newTerminal', label: 'New terminal tab', keys: 'Mod+T', group: 'Tabs' },
   { id: 'tab.close', label: 'Close tab', keys: 'Mod+W', group: 'Tabs' },
   { id: 'settings.open', label: 'Settings', keys: 'Mod+,', group: 'Application' },

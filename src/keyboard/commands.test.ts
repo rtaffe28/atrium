@@ -15,6 +15,12 @@ describe('keyboard bindings', () => {
     expect(matches(press({ key: 'n', metaKey: true, shiftKey: true }), 'Mod+Shift+N')).toBe(true);
   });
 
+  /** Shift changes what the key reports: ⇧R arrives as 'R', not 'r'. */
+  it('matches a shifted letter however the browser cases it', () => {
+    expect(matches(press({ key: 'R', metaKey: true, shiftKey: true }), 'Mod+Shift+R')).toBe(true);
+    expect(matches(press({ key: 'R', ctrlKey: true, shiftKey: true }), 'Mod+Shift+R')).toBe(true);
+  });
+
   it('matches punctuation keys', () => {
     expect(matches(press({ key: ',', metaKey: true }), 'Mod+,')).toBe(true);
   });

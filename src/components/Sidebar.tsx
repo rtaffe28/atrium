@@ -26,6 +26,76 @@ interface Props {
   /** A session with no agent in it — just the shell, in the same directory. */
   onCreateShell: () => void;
   onKill: (id: string) => void;
+  /** The session whose title is being edited, if any. */
+  renamingId: string | null;
+  onBeginRename: (id: string) => void;
+  onRename: (id: string, title: string) => void;
+  onCancelRename: () => void;
+}
+
+/**
+ * A session's title, as a field.
+ *
+ * Enter keeps what was typed and so does clicking away, since what was typed
+ * is the thing worth not losing; Escape throws it away, and so does a blank.
+ * Whichever of those comes first decides and the rest are ignored, because
+ * committing unmounts the field and a browser may blur it on the way out.
+ *
+ * Pointer events stop here. A click on the row enters the session, which puts
+ * the cursor in its terminal — in the middle of typing a name — and a
+ * double-click would start the rename over.
+ */
+function RenameField({
+  title,
+  onCommit,
+  onCancel,
+}: {
+  title: string;
+  onCommit: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const settled = useRef(false);
+
+  // The whole name selected, since a rename usually replaces it.
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+
+  const commit = () => {
+    if (settled.current) return;
+    settled.current = true;
+    const next = ref.current?.value.trim();
+    if (next) onCommit(next);
+    else onCancel();
+  };
+  const cancel = () => {
+    if (settled.current) return;
+    settled.current = true;
+    onCancel();
+  };
+
+  return (
+    <input
+      ref={ref}
+      className="session-title-input"
+      defaultValue={title}
+      spellCheck={false}
+      aria-label="Session name"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') commit();
+        else if (event.key === 'Escape') cancel();
+        else return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onBlur={commit}
+    />
+  );
 }
 
 export function Sidebar({
@@ -35,6 +105,10 @@ export function Sidebar({
   onCreate,
   onCreateShell,
   onKill,
+  renamingId,
+  onBeginRename,
+  onRename,
+  onCancelRename,
 }: Props) {
   const { register, action } = useDrag();
   const railRef = useRef<HTMLElement>(null);
@@ -167,10 +241,19 @@ export function Sidebar({
               <div
                 className={`session-row${session.id === activeId ? ' is-active' : ''}`}
                 onClick={() => onSelect(session.id)}
+                onDoubleClick={() => onBeginRename(session.id)}
               >
                 <span className="session-body">
                   <span className="session-headline">
-                    <span className="session-title">{session.title}</span>
+                    {session.id === renamingId ? (
+                      <RenameField
+                        title={session.title}
+                        onCommit={(title) => onRename(session.id, title)}
+                        onCancel={onCancelRename}
+                      />
+                    ) : (
+                      <span className="session-title">{session.title}</span>
+                    )}
                     {attention && (
                       <span
                         className="attention-mark"
