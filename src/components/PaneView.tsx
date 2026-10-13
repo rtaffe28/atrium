@@ -36,6 +36,7 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
     () =>
       register({
         id: `pane:${zoneId}`,
+        accepts: 'tab',
         priority: 3,
         getRect: () => paneRef.current?.getBoundingClientRect() ?? null,
         resolve: (x, y, rect) =>

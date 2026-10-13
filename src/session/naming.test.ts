@@ -112,7 +112,7 @@ describe("a session's name", () => {
   });
 
   it('is handed to a tab pulled out onto the rail, and follows its program from there', () => {
-    const { store, id, name } = open();
+    const { store, id } = open();
     const groupId = Object.keys(store.list()[0].groups)[0];
     const second = store.addTab(id, groupId, 'terminal');
     store.renameSession(id, 'Bug 412');
@@ -123,6 +123,7 @@ describe("a session's name", () => {
     expect(created.named).toBeUndefined();
     store.feed(second.id, title('◐ Try the other approach'));
     expect(store.list().find((s) => s.id === created.id)?.title).toBe('Try the other approach');
-    expect(name()).toBe('Bug 412');
+    // The new session took the top of the rail, so look the old one up.
+    expect(store.list().find((s) => s.id === id)?.title).toBe('Bug 412');
   });
 });

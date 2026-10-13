@@ -171,6 +171,9 @@ export type DropAction =
   | { kind: 'split'; groupId: string; edge: 'left' | 'right' | 'top' | 'bottom' }
   | { kind: 'rail' };
 
+/** Where a dragged session landed: its place on the rail, among the others. */
+export type RailOrder = { kind: 'order'; index: number };
+
 export interface SessionDriver {
   list(): Session[];
   subscribe(handler: (sessions: Session[]) => void): Unsubscribe;
@@ -214,6 +217,11 @@ export interface SessionDriver {
 
   /** Resolve a completed tab drag. */
   moveTab(sessionId: string, tabId: string, action: DropAction): void;
+  /**
+   * Put a session at `index` on the rail, counted among the other sessions.
+   * New sessions go to the top; this is the only way they leave it.
+   */
+  moveSession(sessionId: string, index: number): void;
   /** Persist a splitter drag. */
   setSizes(sessionId: string, path: number[], sizes: [number, number]): void;
   /**

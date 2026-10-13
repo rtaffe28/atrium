@@ -100,10 +100,11 @@ describe('the empty workspace', () => {
 
   it('opens a session on double click', () => {
     render(<App />);
-    // Kill every session so the empty state is showing.
-    act(() => {
-      for (const kill of document.querySelectorAll('.session-kill')) fireEvent.click(kill);
-    });
+    // Close every session so the empty state is showing. Each one asks first.
+    while (document.querySelector('.session-kill')) {
+      act(() => fireEvent.click(document.querySelector('.session-kill')!));
+      act(() => fireEvent.click(screen.getByText('Close session')));
+    }
     expect(document.querySelector('.empty')).not.toBeNull();
 
     act(() => fireEvent.doubleClick(document.querySelector('.empty')!));

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDrag } from '../dnd/context';
+import { resolveRailOrder } from '../dnd/zones';
 import { useHost } from '../host/context';
 import type { Session } from '../session/types';
 import { isWorking } from '../session/signals';
@@ -111,7 +112,7 @@ export function Sidebar({
   onRename,
   onCancelRename,
 }: Props) {
-  const { register, action } = useDrag();
+  const { begin, register, action, payload } = useDrag();
   const host = useHost();
   const railRef = useRef<HTMLElement>(null);
   const zoneId = useId();
@@ -121,6 +122,7 @@ export function Sidebar({
     () =>
       register({
         id: `rail:${zoneId}`,
+        accepts: 'tab',
         priority: 3,
         getRect: () => railRef.current?.getBoundingClientRect() ?? null,
         resolve: () => ({ kind: 'rail' }),
@@ -128,7 +130,35 @@ export function Sidebar({
     [register, zoneId],
   );
 
+  // Dragging a session along the rail puts it where it is dropped. The row
+  // being dragged keeps its place, dimmed, so the drop is measured against
+  // the other rows only — see resolveRailOrder.
+  useEffect(
+    () =>
+      register({
+        id: `rail-order:${zoneId}`,
+        accepts: 'session',
+        priority: 3,
+        getRect: () => railRef.current?.getBoundingClientRect() ?? null,
+        resolve: (_x, y, _rect, dragged) => {
+          const rows = railRef.current?.querySelectorAll<HTMLElement>('[data-session-id]') ?? [];
+          return resolveRailOrder(
+            y,
+            [...rows]
+              .filter((row) => row.dataset.sessionId !== dragged.sessionId)
+              .map((row) => row.getBoundingClientRect()),
+          );
+        },
+      }),
+    [register, zoneId],
+  );
+
   const railActive = action?.kind === 'rail';
+  const draggingId = payload?.type === 'session' ? payload.sessionId : null;
+  const orderIndex = draggingId !== null && action?.kind === 'order' ? action.index : null;
+  // The rows the drop is measured against, in order; the dragged one is not
+  // among them, so its place is where it will be once it has left.
+  const others = sessions.filter((session) => session.id !== draggingId);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -238,12 +268,21 @@ export function Sidebar({
           // so a request made in a session you are not in is not missed.
           const attention = tabs.some((tab) => tab.attention);
           const working = tabs.some(isWorking);
+          const dragging = session.id === draggingId;
           return (
             <li key={session.id}>
+              {orderIndex !== null && orderIndex === others.indexOf(session) && (
+                <span className="session-insert" />
+              )}
               <div
-                className={`session-row${session.id === activeId ? ' is-active' : ''}`}
+                data-session-id={session.id}
+                className={`session-row${session.id === activeId ? ' is-active' : ''}${dragging ? ' is-dragging' : ''}`}
                 onClick={() => onSelect(session.id)}
                 onDoubleClick={() => onBeginRename(session.id)}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  begin({ type: 'session', sessionId: session.id, title: session.title }, event);
+                }}
               >
                 <span className="session-body">
                   <span className="session-headline">
@@ -285,7 +324,8 @@ export function Sidebar({
                 {working && <span className="working-tag">Working</span>}
                 <button
                   className="session-kill"
-                  title="Kill session"
+                  title="Close session"
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();
                     onKill(session.id);
@@ -297,6 +337,11 @@ export function Sidebar({
             </li>
           );
         })}
+        {orderIndex !== null && orderIndex >= others.length && (
+          <li>
+            <span className="session-insert" />
+          </li>
+        )}
       </ul>
 
       {railActive && <div className="rail-drop-hint">Drop to start a new session</div>}

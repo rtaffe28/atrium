@@ -470,8 +470,15 @@ export abstract class SessionStore implements SessionDriver {
     return [...this.sessions.values()].find((s) => s.tabs[tabId]);
   }
 
+  /**
+   * Sessions in rail order.
+   *
+   * The map's own order, which is the order they are shown and saved in: a
+   * new session goes to the top, and moveSession() is the only other thing
+   * that changes it. Sorting by age here would undo every drag on restart.
+   */
   list(): Session[] {
-    return [...this.sessions.values()].sort((a, b) => b.createdAt - a.createdAt);
+    return [...this.sessions.values()];
   }
 
   subscribe(handler: (sessions: Session[]) => void): Unsubscribe {
@@ -491,7 +498,7 @@ export abstract class SessionStore implements SessionDriver {
         ...(command ? { agent: command } : {}),
       });
     const session = this.makeSession(options.title, options.branch, [tab], 0, options.cwd);
-    this.sessions.set(session.id, session);
+    this.putFirst(session);
     this.notify();
     if (!options.adopt && tab.kind === 'terminal') {
       this.openTerminal(tab.id, options.cwd, tab.agent);
@@ -515,6 +522,20 @@ export abstract class SessionStore implements SessionDriver {
     // A session with no name has nothing to be found by in the rail.
     if (!trimmed) return;
     this.update(sessionId, (session) => ({ ...session, title: trimmed, named: true }));
+  }
+
+  /** Add a session at the top of the rail, where a new one goes. */
+  private putFirst(session: Session): void {
+    this.sessions = new Map([[session.id, session], ...this.sessions]);
+  }
+
+  moveSession(sessionId: string, index: number): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    const rest = [...this.sessions.values()].filter((s) => s.id !== sessionId);
+    rest.splice(Math.max(0, Math.min(index, rest.length)), 0, session);
+    this.sessions = new Map(rest.map((s) => [s.id, s]));
+    this.notify();
   }
 
   // ── tabs ─────────────────────────────────────────────────────────────────
@@ -636,7 +657,7 @@ export abstract class SessionStore implements SessionDriver {
         this.sessions.set(sessionId, { ...source, tabs });
       }
       const created = this.makeSession(tab.title, session.branch, [tab], 0, session.cwd);
-      this.sessions.set(created.id, created);
+      this.putFirst(created);
       this.notify();
       return;
     }

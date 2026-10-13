@@ -34,6 +34,9 @@ export const LAYOUT = {
   titlebar: 38,
   sidebar: 288,
   tabbar: 34,
+  /** The rail's header above its first row, and the pitch of its rows. */
+  railHead: 48,
+  row: 64,
 };
 
 Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
@@ -51,6 +54,11 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
 
   if (el.classList.contains('sidebar')) {
     return rect(0, workspaceTop, LAYOUT.sidebar, height - workspaceTop);
+  }
+  // Rail rows stack under the rail's header, one pitch apart.
+  if (el.classList.contains('session-row')) {
+    const i = [...document.querySelectorAll('.session-row')].indexOf(el);
+    return rect(8, workspaceTop + LAYOUT.railHead + i * LAYOUT.row, LAYOUT.sidebar - 16, LAYOUT.row - 2);
   }
 
   // Panes divide the workspace evenly; enough for two-pane arbitration tests.

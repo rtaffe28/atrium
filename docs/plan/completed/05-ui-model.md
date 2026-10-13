@@ -56,12 +56,22 @@ priority on every pointer move:
 | Zone | Priority | Result |
 |---|---|---|
 | Session rail | 3 | Tab is promoted into a session of its own |
+| Session rail, for a session | 3 | Session moves to where it was dropped |
 | Tab bar | 2 | Reorder within a pane, or move between panes |
 | Pane body, outer 28% | 1 | Split on that edge |
 | Pane body, centre | 1 | Move into that pane's tab bar |
 
 A 5px slop threshold before the drag arms, so a click that wobbles still reads
 as a click.
+
+A zone says what it accepts — a tab or a session — and a drag of the other
+kind passes straight through it, so a session dragged over a pane has nowhere
+to land and never reads as a tab drop. Dragging a session's row along the rail
+reorders the rail: the row stays where it was, dimmed, with a line where it
+will land, and the place is counted among the *other* rows, which is where it
+will be once it has left. New sessions go to the top; after that the order is
+yours and is saved with the workspace, which is why the store keeps sessions
+in rail order rather than sorting them by age.
 
 ## Keys and controls
 
@@ -72,9 +82,12 @@ Deliberate choices, not defaults:
   and an app that swallows it to synthesise an interrupt breaks all three.
   Ctrl-C needs no help: xterm sends `0x03` and the line discipline turns it
   into SIGINT for the foreground process group.
-- **X kills.** No Interrupt/Kill buttons: an `×` on the session row kills the
-  session, an `×` on a tab closes the tab. Buttons for destructive actions
-  belong on the thing they destroy.
+- **X kills, after asking.** No Interrupt/Kill buttons: an `×` on the session
+  row closes the session, an `×` on a tab closes the tab. Buttons for
+  destructive actions belong on the thing they destroy. The session's asks
+  first, because it is small, beside things you click all day, and the
+  session behind it holds running agents. Cancel takes the focus, so Enter and
+  Escape both keep the session; only a click on *Close session* kills it.
 - **⌘N / Ctrl+N** opens a session, **⌘,** opens settings. The modifier follows
   the platform.
 - **New tabs** come from two icons at the top right — a terminal window and a

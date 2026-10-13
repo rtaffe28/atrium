@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { APPEND, resolvePaneDrop, resolvePaneZone, resolveTabBarDrop } from './zones';
+import {
+  APPEND,
+  resolvePaneDrop,
+  resolvePaneZone,
+  resolveRailOrder,
+  resolveTabBarDrop,
+} from './zones';
 
 // A realistic pane body: sidebar is 288 wide, title bar + tab bar are 72 tall.
 const PANE = { left: 288, top: 72, width: 1152, height: 828 };
@@ -107,5 +113,26 @@ describe('resolvePaneZone', () => {
       groupId: 'g1',
       edge: 'top',
     });
+  });
+});
+
+describe('resolveRailOrder', () => {
+  // Three rows of the other sessions, 60 tall from y=100: middles at 130, 190, 250.
+  const rows = [0, 1, 2].map((i) => ({ top: 100 + i * 60, height: 60 }));
+
+  it('puts the session before the first row whose middle the pointer has not passed', () => {
+    expect(resolveRailOrder(50, rows)).toEqual({ kind: 'order', index: 0 });
+    expect(resolveRailOrder(129, rows)).toEqual({ kind: 'order', index: 0 });
+    expect(resolveRailOrder(130, rows)).toEqual({ kind: 'order', index: 1 });
+    expect(resolveRailOrder(200, rows)).toEqual({ kind: 'order', index: 2 });
+  });
+
+  it('puts it last past the last middle', () => {
+    expect(resolveRailOrder(250, rows)).toEqual({ kind: 'order', index: 3 });
+    expect(resolveRailOrder(900, rows)).toEqual({ kind: 'order', index: 3 });
+  });
+
+  it('has one place when there are no other rows', () => {
+    expect(resolveRailOrder(400, [])).toEqual({ kind: 'order', index: 0 });
   });
 });
