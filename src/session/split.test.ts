@@ -90,3 +90,21 @@ describe('splitting never loses a tab', () => {
     }
   });
 });
+
+describe('a tab dropped on the rail', () => {
+  it('leaves the session it came from entirely, and keeps the one it makes whole', () => {
+    const driver = new MockDriver();
+    const session = twoTabSession(driver);
+    const groupId = Object.keys(session.groups)[0];
+    const tabId = session.groups[groupId].tabIds[1];
+
+    driver.moveTab(session.id, tabId, { kind: 'rail' });
+
+    const source = driver.list().find((s) => s.id === session.id)!;
+    expect(source.tabs[tabId], 'still in the old session').toBeUndefined();
+    checkIntegrity(source, 'old session');
+    const created = driver.list().find((s) => s.id !== session.id && s.tabs[tabId])!;
+    expect(created).toBeDefined();
+    checkIntegrity(created, 'new session');
+  });
+});

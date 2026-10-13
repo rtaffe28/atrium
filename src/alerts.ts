@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useHost } from './host/context';
+import { plain } from './session/signals';
 import { useSettings } from './settings/context';
-
-/** A program's title without the status glyph it leads with: `✳ Fix the bug`. */
-const plain = (title: string | undefined) => title?.replace(/^[^\p{L}\p{N}]+/u, '');
 
 /**
  * Pass a tab's request for attention on to the desktop.

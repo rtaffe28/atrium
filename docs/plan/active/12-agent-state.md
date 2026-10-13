@@ -33,6 +33,7 @@ never claims anything the program did not.
 | The program sends | Atrium shows | Until |
 |---|---|---|
 | OSC 0 / 2 — title | the tab's name | another title, or the shell is back (OSC 133 D / A) |
+| that title, while the tab is working | the session's name on the rail, unless the user gave it one | never — it is the session's name now |
 | a spinner frame in that title, or OSC 9;4 progress | **Working** on the session in the rail, a dot on the tab | the spinner leaves the title, `9;4;0`, the shell is back — by its OSC 133 mark, or as the foreground process — or the pty exits |
 | BEL — a real one, not an OSC terminator | a mark on the tab and its session; a tone if *Bell sound* is on | you look at the tab |
 | OSC 9 / 777 / 99 — a notification | the same mark, and a desktop notification if *Desktop notifications* is on; clicking it opens the tab | you look at the tab |
@@ -45,7 +46,34 @@ goes. A wrong alert therefore costs one glance.
 The window also bounces the dock (macOS) or flashes its taskbar entry (Linux,
 Windows) for either kind of request, if it is in the background.
 
-None of this is saved. It described a process that died with the app.
+None of this is saved. It described a process that died with the app. The
+one thing taken from it that is saved is the session's name.
+
+### The session's name
+
+A session is called what the program working in it calls itself. Claude names
+the conversation in its title — `◐ Fix the bug` while a turn runs, `✳ Fix the
+bug` between turns — and the rail copies that name, minus the glyph, as it
+changes (`SessionStore.nameSession()`). It is a copy rather than a live
+reading because the title goes away when the agent exits and is never
+restored, while the name is what you find the session by afterwards; it is
+saved with the session like any other field.
+
+Two titles are not names. One set while nothing in the tab is working — a
+shell that titles itself at the prompt, say — is ignored, since otherwise it
+would replace the agent's name the moment the agent exited. *Working* is
+`isWorking()` again, read before and after the title changes so the `◐ → ✳`
+settle still counts. And a name the user typed is theirs: `renameSession()`
+marks the session `named`, and no program renames it after that. There is no
+way back to automatic naming for that session short of a new one, which has
+not come up.
+
+This is cmux's model — a process title the workspace follows until a custom
+title is set, with the custom title's provenance recorded so an automatic one
+can never overwrite a user's — minus its LLM summariser, which exists because
+cmux names from any process's title and most titles are not names. Taking
+only the title of a *working* program gets the agent's name without the
+summariser, because the agents already write one.
 
 ### Working → finished
 

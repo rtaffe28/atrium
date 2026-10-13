@@ -1,5 +1,5 @@
 import { leafGroupIds, removeLeaf, rightNeighbor, setSizesAt, splitLeaf } from '../layout/tree';
-import { isWorking, newSignalScan, scanSignals, spins, type SignalScan } from './signals';
+import { isWorking, newSignalScan, plain, scanSignals, spins, type SignalScan } from './signals';
 import {
   TRANSIENT_TAB_FIELDS,
   type Alert,
@@ -281,9 +281,34 @@ export abstract class SessionStore implements SessionDriver {
       (key) => JSON.stringify(patch[key]) !== JSON.stringify(tab[key]),
     );
     if (changed) this.patchTab(session.id, tabId, patch);
+    if ('programTitle' in patch) this.nameSession(session, tab, { ...tab, ...patch });
 
     if (alerts.length > 0) this.lastRequest.set(tabId, Date.now());
     for (const alert of alerts) this.emitAlert(tabId, alert);
+  }
+
+  /**
+   * A session is called what the program working in it calls itself.
+   *
+   * Claude names the conversation in its title — `◐ Fix the bug` while a turn
+   * runs, `✳ Fix the bug` between turns — and Codex and most CLIs put their
+   * own spinner beside what they are doing. The name is copied onto the
+   * session as the title changes, and kept: it is what you find the session
+   * by on the rail after the agent goes quiet, exits, or comes back from a
+   * restart, when the title itself is long gone.
+   *
+   * Two titles are not names. One nothing is working under — the shell
+   * setting its own at the prompt, say — would replace the agent's the moment
+   * it exited. And one the user typed is theirs; a program's never replaces
+   * it. Working is the same reading as the rail's tag, isWorking(), taken
+   * before and after the change so a title that stops spinning still counts.
+   */
+  private nameSession(session: Session, before: Tab, after: Tab): void {
+    if (session.named) return;
+    if (!isWorking(before) && !isWorking(after)) return;
+    const name = plain(after.programTitle);
+    if (!name || name === session.title) return;
+    this.update(session.id, (s) => ({ ...s, title: name }));
   }
 
   private emitAlert(tabId: string, alert: Alert): void {
@@ -489,7 +514,7 @@ export abstract class SessionStore implements SessionDriver {
     const trimmed = title.trim();
     // A session with no name has nothing to be found by in the rail.
     if (!trimmed) return;
-    this.update(sessionId, (session) => ({ ...session, title: trimmed }));
+    this.update(sessionId, (session) => ({ ...session, title: trimmed, named: true }));
   }
 
   // ── tabs ─────────────────────────────────────────────────────────────────
@@ -600,6 +625,16 @@ export abstract class SessionStore implements SessionDriver {
       if (onlyTab && onlyGroup) return; // already is its own session
 
       this.detach(sessionId, fromGroupId, tabId);
+      // Out of the old session's tabs as well as its panes. Left there, the
+      // tab is in two sessions at once: what it prints is credited to the old
+      // one, which sessionOfTab() finds first, and a restore re-homes the
+      // orphan into the old session's first pane as a duplicate.
+      const source = this.sessions.get(sessionId);
+      if (source) {
+        const tabs = { ...source.tabs };
+        delete tabs[tabId];
+        this.sessions.set(sessionId, { ...source, tabs });
+      }
       const created = this.makeSession(tab.title, session.branch, [tab], 0, session.cwd);
       this.sessions.set(created.id, created);
       this.notify();

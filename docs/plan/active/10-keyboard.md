@@ -17,7 +17,9 @@ and described again in a panel is two things that drift.
 
 `Mod` is the platform's command key, so a binding is written once and rendered
 as `⌘N` on macOS and `Ctrl+N` elsewhere. A test asserts no two commands claim
-the same keys. Rename is also a double-click on the session's row.
+the same keys. Rename is also a double-click on the session's row. A name you
+give is kept; until you give one, the session is called what its agent calls
+itself — see [`12-agent-state.md`](12-agent-state.md).
 
 Electron's own menu is the other claimant on the keyboard. Its default binds
 Reload to `Mod+R` and Force Reload to `Mod+Shift+R`, and a reload here throws

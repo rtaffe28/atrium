@@ -38,6 +38,16 @@ registered through a `--settings` file the shim hands `claude`: it fires for a
 conversation however it began, which is what makes restore reopen the right
 one. See [`12-agent-state.md`](12-agent-state.md).
 
+**Title ownership (cmux).** A workspace's title follows its process title
+until the user sets one, and the custom title records who set it — `user` or
+`auto` — so that automatic naming can never overwrite a name a person chose.
+Atrium's version is the `named` flag on a session: until it is set, the
+session is called what the program working in it calls itself, which for
+Claude is its name for the conversation. cmux's LLM summariser on top of this
+is not taken; it exists because cmux names from any process title, and
+following only a working program's title gets the agent's name without it.
+See [`12-agent-state.md`](12-agent-state.md).
+
 ## Worth taking next
 
 **Command navigation and re-run (VS Code).** The OSC 133 marks are already

@@ -392,6 +392,21 @@ describe('what a program asks the terminal to show', () => {
   });
 
   /** It described a process that died with the app. */
+  it('names the session after the agent working in it, and keeps the name after it exits', () => {
+    const { f, driver, tabId } = setup();
+    const name = () => driver.list()[0].title;
+    // The first session is a shell the user types `claude` into by hand.
+    expect(name()).toBe('Shell');
+
+    f.emit(tabId, osc('2;◐ Fix the bug'));
+    expect(name()).toBe('Fix the bug');
+
+    f.emit(tabId, `${osc('2;✳ Fix the bug')}${osc('133;D;0')}`);
+    expect(driver.list()[0].tabs[tabId].programTitle).toBeUndefined();
+    expect(name()).toBe('Fix the bug');
+    expect(driver.snapshot()[0].title).toBe('Fix the bug');
+  });
+
   it('never saves any of it', () => {
     const { f, driver, tabId } = setup();
     driver.setFocusedTab(null);
