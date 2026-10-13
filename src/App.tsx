@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTerminalAlerts } from './alerts';
 import { DragProvider } from './dnd/DragProvider';
-import type { DragPayload } from './dnd/context';
+import type { DragAction, DragPayload } from './dnd/context';
 import { HostProvider } from './host/HostProvider';
 import { useHost } from './host/context';
 import { MockHost } from './host/mock';
@@ -9,15 +9,23 @@ import type { Host } from './host/types';
 import { COMMANDS, matches } from './keyboard/commands';
 import { SettingsProvider } from './settings/SettingsProvider';
 import { useSettings } from './settings/context';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { PaneTree } from './components/PaneTree';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { requestFocus, type FocusRequest } from './focusRequest';
-import type { DropAction, Session, TabKind } from './session/types';
+import type { Session, TabKind } from './session/types';
 
 /** How long the workspace must be still before it is saved. */
 const SAVE_DEBOUNCE_MS = 700;
+
+/** What closing a session costs, for the dialog that asks. */
+function closeBody(session: Session): string {
+  const n = Object.keys(session.tabs).length;
+  const tabs = n === 1 ? 'Its tab closes' : `Its ${n} tabs close`;
+  return `${tabs} with it, and whatever is running in them is killed. There is no undo.`;
+}
 /** The longest a save waits for that while things keep changing. */
 const SAVE_MAX_WAIT_MS = 5000;
 
@@ -45,6 +53,8 @@ function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** The session whose title is being edited in the rail, if any. */
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  /** The session whose × was clicked, waiting on a yes. */
+  const [closingId, setClosingId] = useState<string | null>(null);
   /**
    * The tab that should take keyboard focus.
    *
@@ -80,6 +90,8 @@ function Workspace() {
   // activeId is only a preference. Resolving it during render means a killed
   // session falls back to the next one without an effect round-trip.
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0] ?? null;
+  /** The session the dialog is asking about, if it is still there to close. */
+  const closing = sessions.find((s) => s.id === closingId) ?? null;
 
   // Where a new tab lands: the pane you last touched, falling back to the
   // first one so the title-bar buttons still work before you click anything.
@@ -203,6 +215,13 @@ function Workspace() {
     [driver, finishRename],
   );
 
+  /** A close called off: the cursor goes back to the terminal, as after a rename. */
+  const cancelClose = useCallback(() => {
+    setClosingId(null);
+    const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
+    if (tabId) setFocusRequest(requestFocus(tabId));
+  }, [active, targetGroupId]);
+
   // Persist the workspace shortly after it settles. Debounced because a
   // splitter drag fires a change per frame, and writing the whole workspace
   // sixty times a second would be absurd.
@@ -233,7 +252,12 @@ function Workspace() {
   }, [host, driver, sessions, active?.id]);
 
   const handleDrop = useCallback(
-    (payload: DragPayload, action: DropAction) => {
+    (payload: DragPayload, action: DragAction) => {
+      if (payload.type === 'session') {
+        if (action.kind === 'order') driver.moveSession(payload.sessionId, action.index);
+        return;
+      }
+      if (action.kind === 'order') return; // not somewhere a tab can land
       driver.moveTab(payload.sessionId, payload.tabId, action);
     },
     [driver],
@@ -279,7 +303,7 @@ function Workspace() {
             onSelect={selectSession}
             onCreate={createSession}
             onCreateShell={createShellSession}
-            onKill={(id) => driver.killSession(id)}
+            onKill={setClosingId}
             renamingId={renamingId}
             onBeginRename={setRenamingId}
             onRename={renameSession}
@@ -310,6 +334,18 @@ function Workspace() {
         </div>
       </div>
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {closing && (
+        <ConfirmDialog
+          title={`Close "${closing.title}"?`}
+          body={closeBody(closing)}
+          confirm="Close session"
+          onConfirm={() => {
+            driver.killSession(closing.id);
+            setClosingId(null);
+          }}
+          onCancel={cancelClose}
+        />
+      )}
     </DragProvider>
   );
 }

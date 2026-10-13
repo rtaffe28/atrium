@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { DropAction } from '../session/types';
-import { DragCtx, type DragApi, type DragPayload, type DropZone } from './context';
+import { DragCtx, type DragAction, type DragApi, type DragPayload, type DropZone } from './context';
 
 /**
  * Pointer-based drag, not HTML5 drag-and-drop.
@@ -14,12 +13,12 @@ import { DragCtx, type DragApi, type DragPayload, type DropZone } from './contex
 interface DragState {
   payload: DragPayload | null;
   point: { x: number; y: number };
-  action: DropAction | null;
+  action: DragAction | null;
 }
 
 interface Props {
   children: ReactNode;
-  onDrop: (payload: DragPayload, action: DropAction) => void;
+  onDrop: (payload: DragPayload, action: DragAction) => void;
 }
 
 export function DragProvider({ children, onDrop }: Props) {
@@ -29,7 +28,7 @@ export function DragProvider({ children, onDrop }: Props) {
     action: null,
   });
   const zones = useRef(new Map<string, DropZone>());
-  const latest = useRef<{ payload: DragPayload | null; action: DropAction | null }>({
+  const latest = useRef<{ payload: DragPayload | null; action: DragAction | null }>({
     payload: null,
     action: null,
   });
@@ -41,13 +40,17 @@ export function DragProvider({ children, onDrop }: Props) {
     };
   }, []);
 
-  const hitTest = useCallback((x: number, y: number): DropAction | null => {
-    const candidates = [...zones.current.values()].sort((a, b) => b.priority - a.priority);
+  const hitTest = useCallback((x: number, y: number, payload: DragPayload): DragAction | null => {
+    // Only the zones for this kind of thing: a session dragged over a pane
+    // has nowhere to land there, and must not read as a tab drop.
+    const candidates = [...zones.current.values()]
+      .filter((zone) => zone.accepts === payload.type)
+      .sort((a, b) => b.priority - a.priority);
     for (const zone of candidates) {
       const rect = zone.getRect();
       if (!rect) continue;
       if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) continue;
-      const action = zone.resolve(x, y, rect);
+      const action = zone.resolve(x, y, rect, payload);
       if (action) return action;
     }
     return null;
@@ -63,7 +66,7 @@ export function DragProvider({ children, onDrop }: Props) {
         // A few pixels of slop so a click that wobbles does not read as a drag.
         if (!armed && Math.hypot(e.clientX - startX, e.clientY - startY) < 5) return;
         armed = true;
-        const action = hitTest(e.clientX, e.clientY);
+        const action = hitTest(e.clientX, e.clientY, payload);
         latest.current = { payload, action };
         setState({ payload, point: { x: e.clientX, y: e.clientY }, action });
       };
@@ -95,7 +98,9 @@ export function DragProvider({ children, onDrop }: Props) {
           className="drag-ghost"
           style={{ transform: `translate(${state.point.x + 12}px, ${state.point.y + 12}px)` }}
         >
-          <span className={`tab-glyph glyph-${state.payload.kind}`} />
+          {state.payload.type === 'tab' && (
+            <span className={`tab-glyph glyph-${state.payload.kind}`} />
+          )}
           {state.payload.title}
         </div>
       )}

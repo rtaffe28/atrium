@@ -22,6 +22,7 @@ export function TabBar({ barRef, session, group, onActivate, onClose, onAdd }: P
     () =>
       register({
         id: `tabbar:${zoneId}`,
+        accepts: 'tab',
         priority: 2, // above the pane body, so the bar wins where they overlap
         getRect: () => barRef.current?.getBoundingClientRect() ?? null,
         resolve: (x) => {
@@ -45,7 +46,7 @@ export function TabBar({ barRef, session, group, onActivate, onClose, onAdd }: P
         const tab = session.tabs[tabId];
         if (!tab) return null;
         const active = group.activeTabId === tabId;
-        const dragging = payload?.tabId === tabId;
+        const dragging = payload?.type === 'tab' && payload.tabId === tabId;
 
         return (
           <div key={tabId} className="tab-slot">
@@ -57,7 +58,7 @@ export function TabBar({ barRef, session, group, onActivate, onClose, onAdd }: P
                 if (event.button !== 0) return;
                 onActivate(tabId);
                 begin(
-                  { tabId, sessionId: session.id, title: tab.title, kind: tab.kind },
+                  { type: 'tab', tabId, sessionId: session.id, title: tab.title, kind: tab.kind },
                   event,
                 );
               }}

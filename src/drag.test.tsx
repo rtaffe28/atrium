@@ -85,3 +85,69 @@ describe('tab drag', () => {
     expect(document.querySelectorAll('.session-row').length).toBe(before + 1);
   });
 });
+
+/**
+ * Rows sit under the rail's header, one pitch apart — see LAYOUT in
+ * vitest.setup.ts: tops at 86, 150, 214, 278; middles at 117, 181, 245, 309.
+ */
+function dragRowTo(row: Element, x: number, y: number) {
+  act(() => {
+    fireEvent.pointerDown(row, { clientX: 100, clientY: 150, button: 0 });
+    pointer(window, 'pointermove', 100, 300);
+    pointer(window, 'pointermove', x, y);
+    pointer(window, 'pointerup', x, y);
+  });
+}
+
+const railTitles = () =>
+  [...document.querySelectorAll('.session-title')].map((el) => el.textContent);
+const rows = () => [...document.querySelectorAll('.session-row')];
+
+describe('session drag', () => {
+  beforeEach(() => render(<App />));
+  afterEach(cleanup);
+
+  it('moves a session to where it is dropped', () => {
+    const [a, b, c, d] = railTitles();
+    dragRowTo(rows()[0], 100, 260); // past the third row's middle, short of the fourth's
+
+    expect(railTitles()).toEqual([b, c, a, d]);
+  });
+
+  it('moves a session to the top when dropped above the first row', () => {
+    const [a, b, c, d] = railTitles();
+    dragRowTo(rows()[3], 100, 60); // on the rail, above every row
+
+    expect(railTitles()).toEqual([d, a, b, c]);
+  });
+
+  it('shows where the session will land while it is dragged', () => {
+    const row = rows()[0];
+    act(() => {
+      fireEvent.pointerDown(row, { clientX: 100, clientY: 150, button: 0 });
+      pointer(window, 'pointermove', 100, 300);
+      pointer(window, 'pointermove', 100, 260);
+    });
+
+    expect(row.classList.contains('is-dragging')).toBe(true);
+    expect(document.querySelectorAll('.session-insert')).toHaveLength(1);
+
+    act(() => pointer(window, 'pointerup', 100, 260));
+    expect(document.querySelectorAll('.session-insert')).toHaveLength(0);
+  });
+
+  it('has nowhere to land in the workspace', () => {
+    const before = railTitles();
+    dragRowTo(rows()[0], 860, 500); // the middle of the pane
+
+    expect(railTitles()).toEqual(before);
+    expect(document.querySelectorAll('.pane')).toHaveLength(1);
+  });
+
+  it('does not start from the × on a row', () => {
+    const before = railTitles();
+    dragRowTo(rows()[0].querySelector('.session-kill')!, 100, 260);
+
+    expect(railTitles()).toEqual(before);
+  });
+});

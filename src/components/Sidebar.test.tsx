@@ -233,3 +233,60 @@ describe("a session's name on the rail", () => {
     expect(railTitles()).not.toContain('wire up the pty driver');
   });
 });
+
+describe('closing a session', () => {
+  afterEach(cleanup);
+
+  const kill = (title: string) =>
+    screen.getByText(title).closest('.session-row')!.querySelector('.session-kill')!;
+  const dialog = () => screen.queryByRole('alertdialog');
+
+  it('asks first', () => {
+    render(<App />);
+    const before = sessionCount();
+
+    act(() => fireEvent.click(kill('Auth flow migration')));
+
+    expect(dialog()).not.toBeNull();
+    expect(sessionCount()).toBe(before);
+  });
+
+  it('closes it on a yes', () => {
+    render(<App />);
+    const before = sessionCount();
+    act(() => fireEvent.click(kill('Auth flow migration')));
+
+    act(() => fireEvent.click(screen.getByText('Close session')));
+
+    expect(dialog()).toBeNull();
+    expect(sessionCount()).toBe(before - 1);
+    expect(screen.queryByText('Auth flow migration')).toBeNull();
+  });
+
+  it('keeps it on Cancel, on Escape, and on a click outside', () => {
+    render(<App />);
+    const before = sessionCount();
+
+    act(() => fireEvent.click(kill('Auth flow migration')));
+    act(() => fireEvent.click(screen.getByText('Cancel')));
+    expect(dialog()).toBeNull();
+
+    act(() => fireEvent.click(kill('Auth flow migration')));
+    act(() => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(dialog()).toBeNull();
+
+    act(() => fireEvent.click(kill('Auth flow migration')));
+    act(() => fireEvent.click(document.querySelector('.modal-scrim')!));
+    expect(dialog()).toBeNull();
+
+    expect(sessionCount()).toBe(before);
+    expect(screen.getByText('Auth flow migration')).toBeTruthy();
+  });
+
+  it('holds the focus on Cancel, so Enter changes nothing', () => {
+    render(<App />);
+    act(() => fireEvent.click(kill('Auth flow migration')));
+
+    expect(document.activeElement).toBe(screen.getByText('Cancel'));
+  });
+});

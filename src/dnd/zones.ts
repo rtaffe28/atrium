@@ -1,4 +1,4 @@
-import type { DropAction } from '../session/types';
+import type { DropAction, RailOrder } from '../session/types';
 
 /** Sentinel meaning "append to the end of the tab bar". */
 export const APPEND = Number.MAX_SAFE_INTEGER;
@@ -68,6 +68,23 @@ export function resolveTabBarDrop(
     }
   }
   return { kind: 'tabbar', groupId, index: tabRects.length };
+}
+
+/**
+ * Where a session dropped at y should sit on the rail.
+ *
+ * `rowRects` are the other sessions' rows, top to bottom, without the one
+ * being dragged — it still takes up its space while dimmed, and counting it
+ * would give a place that shifts as soon as it leaves. The session goes
+ * before the first row whose middle the pointer has not passed, or last.
+ */
+export function resolveRailOrder(
+  y: number,
+  rowRects: Array<{ top: number; height: number }>,
+): RailOrder {
+  let index = 0;
+  for (const row of rowRects) if (y >= row.top + row.height / 2) index++;
+  return { kind: 'order', index };
 }
 
 /**

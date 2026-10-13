@@ -159,7 +159,9 @@ export class MockDriver extends SessionStore {
     // Named as the user would have named them, so the rail reads as designed
     // while the scripts play rather than switching to each script's task a
     // second in. A session opened from the + button is named by its agent.
-    for (const session of [s1, s2, s3, s4]) {
+    // Newest first, which is how the rail orders sessions until they are
+    // rearranged by hand.
+    for (const session of [s3, s2, s1, s4]) {
       this.sessions.set(session.id, { ...session, named: true });
     }
 
