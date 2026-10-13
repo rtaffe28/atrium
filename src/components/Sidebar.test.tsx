@@ -192,3 +192,44 @@ describe('renaming a session', () => {
     expect(screen.getByLabelText('Session name')).toBeTruthy();
   });
 });
+
+describe("a session's name on the rail", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  const railTitles = () =>
+    [...document.querySelectorAll('.session-title')].map((el) => el.textContent);
+  const field = () => screen.getByLabelText('Session name') as HTMLInputElement;
+
+  /** The + button's session runs a scripted Claude turn, which names itself a second in. */
+  it('follows the agent in it', () => {
+    vi.useFakeTimers();
+    render(<App />);
+    act(() => fireEvent.click(plusButton()));
+    expect(railTitles()).toContain('claude');
+
+    act(() => vi.advanceTimersByTime(1100));
+
+    expect(railTitles()).toContain('wire up the pty driver');
+    expect(railTitles()).not.toContain('claude');
+  });
+
+  it('keeps the name you gave it instead', () => {
+    vi.useFakeTimers();
+    render(<App />);
+    act(() => fireEvent.click(plusButton()));
+    // The new session is the one in front, so the shortcut renames it.
+    act(() => fireEvent.keyDown(window, { key: 'R', metaKey: true, shiftKey: true }));
+    act(() => {
+      fireEvent.change(field(), { target: { value: 'PTY driver' } });
+      fireEvent.keyDown(field(), { key: 'Enter' });
+    });
+
+    act(() => vi.advanceTimersByTime(1100));
+
+    expect(railTitles()).toContain('PTY driver');
+    expect(railTitles()).not.toContain('wire up the pty driver');
+  });
+});

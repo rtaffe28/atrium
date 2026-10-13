@@ -240,6 +240,15 @@ export function spins(title: string | undefined): boolean {
   return SPINNER.test(title ?? '');
 }
 
+/**
+ * A program's title without the status glyph it leads with: `✳ Fix the bug`
+ * and `◐ Fix the bug` are both "Fix the bug", which is what the program calls
+ * what it is doing.
+ */
+export function plain(title: string | undefined): string {
+  return (title ?? '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
+}
+
 function fromBase64(text: string): string {
   try {
     const bytes = Uint8Array.from(atob(text), (c) => c.charCodeAt(0));

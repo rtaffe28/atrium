@@ -156,7 +156,12 @@ export class MockDriver extends SessionStore {
     const d1 = this.makeTab('terminal', { title: 'claude', agent: 'claude' });
     const s4 = this.makeSession('WebGL renderer spike', 'ryan/webgl-spike', [d1], 31, cwd);
 
-    for (const session of [s1, s2, s3, s4]) this.sessions.set(session.id, session);
+    // Named as the user would have named them, so the rail reads as designed
+    // while the scripts play rather than switching to each script's task a
+    // second in. A session opened from the + button is named by its agent.
+    for (const session of [s1, s2, s3, s4]) {
+      this.sessions.set(session.id, { ...session, named: true });
+    }
 
     this.play(s1.id, a1.id, agentScript(cwd, 'build the session rail', [
       'src/components/Sidebar.tsx',
@@ -208,7 +213,7 @@ export class MockDriver extends SessionStore {
   protected openTerminal(tabId: string, cwd: string, agent?: string): void {
     if (agent) {
       const session = this.sessionOfTab(tabId);
-      this.play(session?.id ?? '', tabId, agentScript(cwd, 'new session', [
+      this.play(session?.id ?? '', tabId, agentScript(cwd, 'wire up the pty driver', [
         'src/session/pty.ts',
         'electron/main.ts',
       ]));

@@ -113,7 +113,19 @@ export interface DiffStat {
 
 export interface Session {
   id: string;
+  /**
+   * What the rail calls this session.
+   *
+   * Until the user names it, it is whatever the program working in it calls
+   * itself — Claude's name for the conversation, read from the title it
+   * sets — and follows that as it changes. See SessionStore.nameSession().
+   */
   title: string;
+  /**
+   * The user typed the title. Programs stop naming the session from then on;
+   * a name someone chose is not to be replaced by one a program came up with.
+   */
+  named?: boolean;
   cwd: string;
   branch: string;
   createdAt: number;
@@ -183,7 +195,10 @@ export interface SessionDriver {
 
   createSession(options: CreateSessionOptions): Session;
   killSession(sessionId: string): void;
-  /** Give a session a new title. Blank is ignored. */
+  /**
+   * Give a session a new title, and keep it: a session the user has named is
+   * no longer named by its programs. Blank is ignored.
+   */
   renameSession(sessionId: string, title: string): void;
 
   addTab(sessionId: string, groupId: string, kind: TabKind): Tab;
