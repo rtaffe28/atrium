@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
 
@@ -73,8 +74,15 @@ describe('keyboard focus follows the session you enter', () => {
     expect(focused()).toBe(true);
   });
 
-  it('selects the address bar of a browser tab you add', () => {
-    render(<App />);
+  it('selects the address bar of a browser tab you add, under StrictMode too', () => {
+    // StrictMode renders twice and runs effects twice, which is how the app
+    // runs in development. A one-shot focus request claimed during render is
+    // spent before the render that counts.
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
     act(() => {
       fireEvent.click(screen.getByText('Auth flow migration').closest('.session-row')!);
     });

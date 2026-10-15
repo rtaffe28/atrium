@@ -1,7 +1,16 @@
 import type { SurfaceDriver, SurfaceEvent, Unsubscribe } from '../types';
 
+/**
+ * One per surface id, for as long as anything is mounted or subscribed.
+ *
+ * The entry outlives any one mount — see the Electron driver for why the
+ * listeners, in particular, must. History lives here too: an iframe reports
+ * nothing about where it has been, so it is kept from the navigations this
+ * driver was asked for, and a remount starts it over.
+ */
 interface Entry {
-  frame: HTMLIFrameElement;
+  /** Null between mounts. */
+  frame: HTMLIFrameElement | null;
   listeners: Set<(event: SurfaceEvent) => void>;
   history: string[];
   cursor: number;
@@ -25,28 +34,40 @@ export class IframeSurfaces implements SurfaceDriver {
     frame.setAttribute('title', 'Embedded page');
     if (options.url) frame.src = options.url;
 
-    const entry: Entry = {
-      frame,
-      listeners: this.entries.get(id)?.listeners ?? new Set(),
-      history: options.url ? [options.url] : [],
-      cursor: options.url ? 0 : -1,
-    };
+    const entry = this.entry(id);
+    entry.frame = frame;
+    entry.history = options.url ? [options.url] : [];
+    entry.cursor = options.url ? 0 : -1;
 
-    const onLoad = () => this.emit(id, { type: 'loading', loading: false });
+    const onLoad = () => {
+      if (entry.frame === frame) this.emit(id, { type: 'loading', loading: false });
+    };
     frame.addEventListener('load', onLoad);
 
     container.appendChild(frame);
-    this.entries.set(id, entry);
     if (options.url) this.emit(id, { type: 'loading', loading: true });
 
     return () => {
       frame.removeEventListener('load', onLoad);
       frame.remove();
-      // Listeners outlive the mount: a tab that moves between panes remounts
-      // its surface but keeps whoever was subscribed to it.
-      const current = this.entries.get(id);
-      if (current?.frame === frame) this.entries.delete(id);
+      if (entry.frame === frame) entry.frame = null;
+      this.prune(id);
     };
+  }
+
+  private entry(id: string): Entry {
+    let entry = this.entries.get(id);
+    if (!entry) {
+      entry = { frame: null, listeners: new Set(), history: [], cursor: -1 };
+      this.entries.set(id, entry);
+    }
+    return entry;
+  }
+
+  /** Forget a surface once nothing is mounted or listening. */
+  private prune(id: string) {
+    const entry = this.entries.get(id);
+    if (entry && !entry.frame && entry.listeners.size === 0) this.entries.delete(id);
   }
 
   private emit(id: string, event: SurfaceEvent) {
@@ -55,14 +76,19 @@ export class IframeSurfaces implements SurfaceDriver {
 
   private go(id: string, url: string, record: boolean) {
     const entry = this.entries.get(id);
-    if (!entry) return;
+    if (!entry?.frame) return;
     entry.frame.src = url;
     if (record) {
       entry.history = [...entry.history.slice(0, entry.cursor + 1), url];
       entry.cursor = entry.history.length - 1;
     }
     this.emit(id, { type: 'loading', loading: true });
-    this.emit(id, { type: 'url', url });
+    this.emit(id, {
+      type: 'url',
+      url,
+      canGoBack: entry.cursor > 0,
+      canGoForward: entry.cursor < entry.history.length - 1,
+    });
     this.emit(id, { type: 'title', title: url.replace(/^https?:\/\//, '').split('/')[0] });
   }
 
@@ -89,15 +115,17 @@ export class IframeSurfaces implements SurfaceDriver {
     this.go(id, entry.history[entry.cursor], false);
   }
 
+  /** An iframe has no developer tools of its own; the browser's cover it. */
+  async toggleDevTools() {}
+
   subscribe(id: string, handler: (event: SurfaceEvent) => void): Unsubscribe {
-    let entry = this.entries.get(id);
-    if (!entry) {
-      // Subscribing before mount is normal: the component wires up its
-      // listener on the same render that asks for the surface.
-      entry = { frame: null as never, listeners: new Set(), history: [], cursor: -1 };
-      this.entries.set(id, entry);
-    }
+    // Subscribing before mount is normal: the component wires up its
+    // listener on the same render that asks for the surface.
+    const entry = this.entry(id);
     entry.listeners.add(handler);
-    return () => entry.listeners.delete(handler);
+    return () => {
+      entry.listeners.delete(handler);
+      this.prune(id);
+    };
   }
 }

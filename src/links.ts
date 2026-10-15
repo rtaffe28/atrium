@@ -13,3 +13,16 @@ export function isOpenLinkClick(
 ): boolean {
   return platform === 'mac' ? event.metaKey : event.ctrlKey;
 }
+
+/**
+ * What an address-bar entry means as a URL, or null for nothing at all.
+ *
+ * Anything without a scheme gets http://, so `localhost:5173` goes where you
+ * meant. VS Code's address bar falls back to a web search; a pane beside an
+ * agent is for the server it just started, so there is no search here.
+ */
+export function toUrl(entry: string): string | null {
+  const trimmed = entry.trim();
+  if (!trimmed) return null;
+  return /^(https?|file):\/\/|^about:/i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}

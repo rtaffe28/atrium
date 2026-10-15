@@ -510,51 +510,58 @@ kbd {
 .terminal-host .xterm { height: 100%; }
 
 .browser { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* The toolbar VS Code's integrated browser and Cursor's share: navigation on
+   the left, the address bar taking the width, the page's tools on the right. */
 .browser-bar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 2px;
+  padding: 5px 8px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--panel);
 }
-.browser-nav {
-  width: 22px; height: 22px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--panel-raised);
-  color: var(--text-dim);
-  line-height: 1;
+.browser-address {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 6px;
 }
-.browser-nav:hover { color: var(--text); }
 .browser-url {
   flex: 1;
   min-width: 0;
   height: 24px;
-  padding: 0 9px;
+  padding: 0 26px 0 10px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 6px;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 11.5px;
   outline: none;
 }
+.browser-url:hover { border-color: var(--panel-high); }
 .browser-url:focus { border-color: var(--accent); }
+.browser-url::placeholder { color: var(--text-faint); }
 .surface-host { flex: 1; min-width: 0; min-height: 0; display: flex; }
 .surface-frame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
 /* <webview> is replaced content and collapses without an explicit size. */
 webview.surface-frame { display: inline-flex; }
 
+/* Loading shows inside the address bar, where a browser tab's spinner sits. */
 .browser-spinner {
+  position: absolute;
+  right: 8px;
   width: 12px;
   height: 12px;
-  flex: 0 0 auto;
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 700ms linear infinite;
+  pointer-events: none;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
