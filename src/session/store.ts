@@ -14,9 +14,22 @@ import {
   type Unsubscribe,
 } from './types';
 
-/** A browser tab's title before the page reports one: its host. */
+/**
+ * A browser tab's title before the page reports one: its host, or for a
+ * file, the file's name.
+ */
 export function titleFromUrl(url: string): string {
-  return url.replace(/^https?:\/\//, '').split('/')[0] || 'New tab';
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'New tab';
+  }
+  if (parsed.host) return parsed.host;
+  if (parsed.protocol === 'file:') {
+    return parsed.pathname.split('/').filter(Boolean).pop() ?? 'file';
+  }
+  return parsed.protocol.replace(/:$/, '') || 'New tab';
 }
 
 let counter = 0;

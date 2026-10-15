@@ -1,4 +1,4 @@
-import { claimFocus, type FocusRequest } from '../focusRequest';
+import type { FocusRequest } from '../focusRequest';
 import { useEffect, useId, useRef } from 'react';
 import { useDrag } from '../dnd/context';
 import { APPEND, resolvePaneZone } from '../dnd/zones';
@@ -83,14 +83,24 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
         )}
         {activeTab?.kind === 'browser' && (
           <BrowserView
+            // One address bar per tab: switching tabs must not carry the last
+            // one's draft, spinner or back/forward state across.
+            key={activeTab.id}
             tab={activeTab}
+            // Moving to another site names the tab after it until the page
+            // sends a title. Moving within one keeps the name it has: a route
+            // change in an app rarely changes the title, and a reload never.
             onNavigate={(url) =>
-              driver.patchTab(session.id, activeTab.id, {
-                url,
-                title: titleFromUrl(url),
-              })
+              driver.patchTab(
+                session.id,
+                activeTab.id,
+                titleFromUrl(url) === titleFromUrl(activeTab.url ?? '')
+                  ? { url }
+                  : { url, title: titleFromUrl(url) },
+              )
             }
-            focusUrlBar={claimFocus(focusRequest ?? null, activeTab.id)}
+            onTitle={(title) => driver.patchTab(session.id, activeTab.id, { title })}
+            focusRequest={focusRequest}
             onOpenLink={openLink}
           />
         )}

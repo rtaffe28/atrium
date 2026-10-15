@@ -21,6 +21,7 @@ in one folder is a document sitting in the other.
 | [`10-keyboard.md`](active/10-keyboard.md) | the binding table, and the palette that would reshape it |
 | [`12-agent-state.md`](active/12-agent-state.md) | tabs show what their program sends — title, bell, notification, progress — and nothing inferred |
 | [`13-dogfooding.md`](active/13-dogfooding.md) | what developing Atrium in Atrium has turned up, and what to do about it |
+| [`15-browser.md`](active/15-browser.md) | the browser pane after VS Code's and Cursor's, and the rule that stops it reloading itself |
 
 ## completed/ — built, and now the reference
 

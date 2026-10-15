@@ -52,7 +52,12 @@ export interface Capabilities {
 
 export type SurfaceEvent =
   | { type: 'title'; title: string }
-  | { type: 'url'; url: string }
+  /**
+   * The page is at `url` now, with whether it has anywhere to go back or
+   * forward to. Reported, never requested: a clicked link, a redirect, a hash
+   * change. The app records it and does not send it back — see HostSurface.
+   */
+  | { type: 'url'; url: string; canGoBack: boolean; canGoForward: boolean }
   | { type: 'loading'; loading: boolean }
   | { type: 'error'; message: string }
   /** The page asked for a link in a new tab: a Cmd/Ctrl-click, or target=_blank. */
@@ -67,13 +72,20 @@ export type SurfaceEvent =
  * under Electron — so `mount` is the one place a DOM node crosses the
  * boundary. That is fine: surfaces are renderer-side on every host we plan to
  * support. Only the control and event traffic below ever needs to be IPC.
+ *
+ * Control runs one way: the methods ask the surface to go somewhere, the
+ * `url` event says where it went. Nothing feeds the second back into the
+ * first — a surface told to go where it already is reloads.
  */
 export interface SurfaceDriver {
   mount(id: string, container: HTMLElement, options: { url?: string }): Unsubscribe;
+  /** Load `url`, as entering it in the address bar does. */
   navigate(id: string, url: string): Promise<void>;
   reload(id: string): Promise<void>;
   back(id: string): Promise<void>;
   forward(id: string): Promise<void>;
+  /** Open the page's developer tools, or close them if they are open. */
+  toggleDevTools(id: string): Promise<void>;
   subscribe(id: string, handler: (event: SurfaceEvent) => void): Unsubscribe;
 }
 

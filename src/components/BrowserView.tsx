@@ -1,82 +1,232 @@
 import { useEffect, useRef, useState } from 'react';
+import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useCapability, useHost } from '../host/context';
+import { toUrl } from '../links';
 import type { Tab } from '../session/types';
 import { HostSurface } from './HostSurface';
 
 interface Props {
   tab: Tab;
+  /** The page is at `url`: record it. Never a request to go there. */
   onNavigate: (url: string) => void;
-  focusUrlBar?: boolean;
+  /** The page named itself. */
+  onTitle: (title: string) => void;
+  focusRequest?: FocusRequest | null;
   /** The page asked for a link in a new tab. */
   onOpenLink?: (url: string) => void;
 }
 
-export function BrowserView({ tab, onNavigate, focusUrlBar, onOpenLink }: Props) {
+/** The toolbar's glyphs, on the 16-unit grid the title bar's are drawn on. */
+function Icon({ d }: { d: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
+const ICON = {
+  back: 'M9.75 3.5 5.25 8l4.5 4.5',
+  forward: 'M6.25 3.5 10.75 8l-4.5 4.5',
+  reload: 'M15.33 2.67v4h-4M13.66 10a6 6 0 1 1-1.41-6.24L15.33 6.67',
+  devtools: 'M10.67 12l4-4-4-4M5.33 4l-4 4 4 4',
+  external:
+    'M12 8.67v4a1.33 1.33 0 0 1-1.33 1.33H3.33A1.33 1.33 0 0 1 2 12.67V5.33A1.33 1.33 0 0 1 3.33 4h4M10 2h4v4M6.67 9.33 14 2',
+};
+
+/**
+ * A browser pane, laid out the way VS Code's integrated browser and Cursor's
+ * are: back, forward and reload on the left, the address bar taking the
+ * width, the page's tools on the right.
+ *
+ * The surface owns where it is. Enter in the address bar asks it to go
+ * somewhere; everything the page does for itself — a clicked link, a
+ * redirect, a hash change — comes back as a `url` event, which is recorded
+ * and shown but never sent back down. HostSurface says why.
+ */
+export function BrowserView({ tab, onNavigate, onTitle, focusRequest, onOpenLink }: Props) {
   const host = useHost();
   const surfaceKind = useCapability('browserSurface');
   const [draft, setDraft] = useState(tab.url ?? '');
   const [syncedUrl, setSyncedUrl] = useState(tab.url);
+  const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState({ canGoBack: false, canGoForward: false });
   const urlRef = useRef<HTMLInputElement>(null);
+  const selectOnMouseUp = useRef(false);
 
-  // Adjusting state during render is the documented way to reset on a prop
-  // change — cheaper than an effect, and no cascading render.
+  // The address bar follows the page, except while it is being typed in: a
+  // page that moves on its own — a hash that follows the scroll, a poll that
+  // rewrites the query — must not take a half-typed address away. Adjusting
+  // state during render is the documented way to reset on a prop change.
   if (tab.url !== syncedUrl) {
     setSyncedUrl(tab.url);
-    setDraft(tab.url ?? '');
+    if (!editing) setDraft(tab.url ?? '');
   }
 
+  // Claimed here and not during render: React's development mode renders a
+  // component twice and keeps the second result, and a one-shot request
+  // claimed by the first render is spent by then. An effect runs once per
+  // mount, and the focus it gives survives being asked again.
   useEffect(() => {
-    if (!focusUrlBar) return;
+    if (!claimFocus(focusRequest ?? null, tab.id)) return;
     // focus() then select(): select() alone moves the caret without taking
     // focus, so the field looks ready to type in and is not.
     urlRef.current?.focus();
     urlRef.current?.select();
-  }, [focusUrlBar]);
+  }, [focusRequest, tab.id]);
+
+  // The pane hands these down as fresh closures on each of its renders, which
+  // is every store change. Read through a ref, they cost one subscription for
+  // the life of the tab rather than one per keystroke in the terminal beside it.
+  const callbacks = useRef({ onNavigate, onTitle, onOpenLink });
+  useEffect(() => {
+    callbacks.current = { onNavigate, onTitle, onOpenLink };
+  });
 
   useEffect(
     () =>
       host.surfaces.subscribe(tab.id, (event) => {
-        if (event.type === 'loading') setLoading(event.loading);
-        if (event.type === 'url') onNavigate(event.url);
-        if (event.type === 'open') onOpenLink?.(event.url);
+        switch (event.type) {
+          case 'loading':
+            setLoading(event.loading);
+            if (event.loading) setError(null);
+            break;
+          case 'url':
+            setHistory({ canGoBack: event.canGoBack, canGoForward: event.canGoForward });
+            setError(null);
+            callbacks.current.onNavigate(event.url);
+            break;
+          case 'title':
+            // A page with no title of its own keeps its host as a name.
+            if (event.title.trim()) callbacks.current.onTitle(event.title);
+            break;
+          case 'error':
+            setError(event.message);
+            break;
+          case 'open':
+            callbacks.current.onOpenLink?.(event.url);
+            break;
+        }
       }),
-    [host, tab.id, onNavigate, onOpenLink],
+    [host, tab.id],
   );
 
   if (surfaceKind === 'none') {
     return <div className="empty">This host cannot embed web pages.</div>;
   }
 
+  const go = (url: string) => {
+    // Recorded first, so a blank tab has a URL to mount its surface at. On a
+    // tab that already has one, navigate() does the loading, and the record
+    // is corrected when the page reports where it actually landed.
+    onNavigate(url);
+    void host.surfaces.navigate(tab.id, url);
+  };
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    onNavigate(/^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`);
+    const url = toUrl(draft);
+    if (!url) return;
+    go(url);
+    urlRef.current?.blur();
   };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    // The first Escape puts the page's URL back; a second leaves the bar.
+    if (draft !== (tab.url ?? '')) setDraft(tab.url ?? '');
+    else urlRef.current?.blur();
+  };
+
+  // Focus selects the whole address, as a browser's does. When the focus came
+  // from a click, Chromium's default mouseup would then collapse the selection
+  // to a caret where the click landed; that one mouseup is swallowed. A click
+  // into a bar that already has focus places the caret as usual.
+  const onMouseDown = (event: React.MouseEvent<HTMLInputElement>) => {
+    selectOnMouseUp.current = document.activeElement !== event.currentTarget;
+  };
+  const onMouseUp = (event: React.MouseEvent<HTMLInputElement>) => {
+    if (!selectOnMouseUp.current) return;
+    selectOnMouseUp.current = false;
+    event.preventDefault();
+  };
+  const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    setEditing(true);
+    event.currentTarget.select();
+  };
+  const onBlur = () => {
+    setEditing(false);
+    selectOnMouseUp.current = false;
+    setDraft(tab.url ?? '');
+  };
+
+  // window.open from the app's own window never opens a window: under
+  // Electron the main process hands the URL to the system browser, and in a
+  // browser tab it is a new tab. Both are what "open externally" means.
+  const openExternal = () => {
+    if (tab.url) window.open(tab.url, '_blank', 'noopener');
+  };
+
+  const nav = (label: string, icon: string, onClick: () => void, disabled: boolean) => (
+    <button
+      type="button"
+      className="icon-button subtle"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+    >
+      <Icon d={icon} />
+    </button>
+  );
 
   return (
     <div className="browser">
       <form className="browser-bar" onSubmit={submit}>
-        <button type="button" className="browser-nav" onClick={() => void host.surfaces.back(tab.id)} title="Back">
-          ‹
-        </button>
-        <button type="button" className="browser-nav" onClick={() => void host.surfaces.forward(tab.id)} title="Forward">
-          ›
-        </button>
-        <button type="button" className="browser-nav" onClick={() => void host.surfaces.reload(tab.id)} title="Reload">
-          ↻
-        </button>
-        <input
-          ref={urlRef}
-          className="browser-url"
-          value={draft}
-          spellCheck={false}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Enter a URL"
-        />
-        {loading && <span className="browser-spinner" aria-label="Loading" />}
+        {nav('Back', ICON.back, () => void host.surfaces.back(tab.id), !history.canGoBack)}
+        {nav('Forward', ICON.forward, () => void host.surfaces.forward(tab.id), !history.canGoForward)}
+        {nav('Reload', ICON.reload, () => void host.surfaces.reload(tab.id), !tab.url)}
+        <div className="browser-address">
+          <input
+            ref={urlRef}
+            className="browser-url"
+            value={draft}
+            spellCheck={false}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKeyDown}
+            onMouseDown={onMouseDown}
+            onMouseUp={onMouseUp}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            placeholder="Enter a URL"
+            aria-label="Address"
+          />
+          {loading && <span className="browser-spinner" aria-label="Loading" />}
+        </div>
+        {/* An iframe has no developer tools of its own; the page around it
+            is inspected with the browser's. */}
+        {surfaceKind === 'webview' &&
+          nav('Developer tools', ICON.devtools, () => void host.surfaces.toggleDevTools(tab.id), !tab.url)}
+        {nav('Open in external browser', ICON.external, openExternal, !tab.url)}
       </form>
+      {error && (
+        <div className="browser-error" role="alert">
+          Could not load {tab.url}: {error}
+        </div>
+      )}
       {tab.url ? (
         <HostSurface id={tab.id} url={tab.url} />
       ) : (

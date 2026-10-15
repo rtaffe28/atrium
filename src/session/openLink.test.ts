@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { rightNeighbor } from '../layout/tree';
 import { isOpenLinkClick } from '../links';
 import { MockDriver } from './mock';
+import { titleFromUrl } from './store';
 import type { LayoutNode, Session } from './types';
 
 const find = (driver: MockDriver, id: string) => driver.list().find((s) => s.id === id)!;
@@ -87,5 +88,21 @@ describe('isOpenLinkClick', () => {
     expect(isOpenLinkClick({ metaKey: false, ctrlKey: true }, 'linux')).toBe(true);
     expect(isOpenLinkClick({ metaKey: true, ctrlKey: false }, 'linux')).toBe(false);
     expect(isOpenLinkClick({ metaKey: false, ctrlKey: false }, 'mac')).toBe(false);
+  });
+});
+
+describe('titleFromUrl', () => {
+  it('names a tab after its host, port included', () => {
+    expect(titleFromUrl('https://example.com/docs')).toBe('example.com');
+    expect(titleFromUrl('http://localhost:5173/app')).toBe('localhost:5173');
+  });
+
+  it('names a file tab after the file', () => {
+    expect(titleFromUrl('file:///tmp/report.html')).toBe('report.html');
+  });
+
+  it('has a name for anything else', () => {
+    expect(titleFromUrl('about:blank')).toBe('about');
+    expect(titleFromUrl('')).toBe('New tab');
   });
 });
