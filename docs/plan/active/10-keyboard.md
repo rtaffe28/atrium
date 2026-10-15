@@ -41,6 +41,14 @@ problem: `Ctrl+N` and `Ctrl+W` collide with things people type. Both platforms'
 terminals solve it the same way and we should follow — `Ctrl+Shift+` for app
 commands, leaving plain `Ctrl+` to the terminal.
 
+The one key below `Mod` the app touches is Shift+Enter, and it still goes to
+the terminal. xterm.js encodes it as a bare carriage return, the same byte as
+Enter, so Claude Code could not tell "new line" from "send". The terminal now
+sends ESC CR for it — what Claude Code's own `/terminal-setup` binds
+Shift+Enter to in VS Code, Zed and Alacritty, and what Alt+Enter already
+sends — and lets every other key through untouched. `src/keyboard/terminal.ts`
+is the whole of it, and a test holds the pass-through for Escape.
+
 ## Rebinding
 
 Three pieces, in order of what they unlock:

@@ -6,6 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useHost } from '../host/context';
+import { encodeKey } from '../keyboard/terminal';
 import { isResizing, onSettled } from '../layout/settle';
 import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
@@ -113,11 +114,25 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
 
     fit.fit();
 
-    // No custom key handling. Every keystroke reaches the pty, Escape
-    // included: ESC is load-bearing for vim, readline and agents' own cancel
-    // handling, and swallowing it to synthesise an interrupt breaks all three.
-    // Ctrl-C already does the right thing without our help — xterm sends 0x03
-    // and the line discipline turns it into SIGINT for the foreground group.
+    // Every keystroke reaches the pty, Escape included: ESC is load-bearing
+    // for vim, readline and agents' own cancel handling, and swallowing it to
+    // synthesise an interrupt breaks all three. Ctrl-C already does the right
+    // thing without our help — xterm sends 0x03 and the line discipline turns
+    // it into SIGINT for the foreground group. The one key re-encoded on the
+    // way is Shift+Enter, which xterm would send as a bare CR, identical to
+    // Enter; see keyboard/terminal.ts. It still reaches the pty, as bytes an
+    // agent can tell apart.
+    term.attachCustomKeyEventHandler((event) => {
+      const sequence = encodeKey(event);
+      if (sequence === null) return true;
+      if (event.type === 'keydown') {
+        // Cancelling the keydown stops the keypress that would follow, which
+        // xterm would encode as the plain Enter being replaced.
+        event.preventDefault();
+        term.input(sequence);
+      }
+      return false;
+    });
 
     const detach = driver.attach(tabId, (chunk) => term.write(chunk));
     const typed = term.onData((data) => driver.write(tabId, data));
