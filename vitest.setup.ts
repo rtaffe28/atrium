@@ -20,6 +20,10 @@ vi.mock('@xterm/xterm', () => ({
     onData() {
       return { dispose() {} };
     }
+    input(data: string) {
+      (globalThis as Record<string, unknown>).__xtermInput ??= [];
+      ((globalThis as Record<string, unknown>).__xtermInput as string[]).push(data);
+    }
   },
 }));
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit() {} } }));
