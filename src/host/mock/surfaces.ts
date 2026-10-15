@@ -45,7 +45,13 @@ export class IframeSurfaces implements SurfaceDriver {
     frame.addEventListener('load', onLoad);
 
     container.appendChild(frame);
-    if (options.url) this.emit(id, { type: 'loading', loading: true });
+    // A microtask later, not now: the component subscribes in its own effect,
+    // which runs after this one, and a spinner reported before then is lost.
+    if (options.url) {
+      queueMicrotask(() => {
+        if (entry.frame === frame) this.emit(id, { type: 'loading', loading: true });
+      });
+    }
 
     return () => {
       frame.removeEventListener('load', onLoad);
@@ -78,7 +84,9 @@ export class IframeSurfaces implements SurfaceDriver {
     const entry = this.entries.get(id);
     if (!entry?.frame) return;
     entry.frame.src = url;
-    if (record) {
+    // Enter on the address already shown is a reload, as in a browser: the
+    // page loads again and history is as it was.
+    if (record && url !== entry.history[entry.cursor]) {
       entry.history = [...entry.history.slice(0, entry.cursor + 1), url];
       entry.cursor = entry.history.length - 1;
     }

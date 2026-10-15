@@ -12,7 +12,6 @@ interface WebviewElement extends HTMLElement {
   goForward(): void;
   canGoBack(): boolean;
   canGoForward(): boolean;
-  getTitle(): string;
   openDevTools(): void;
   closeDevTools(): void;
   isDevToolsOpened(): boolean;
@@ -102,18 +101,7 @@ export class WebviewSurfaces implements SurfaceDriver {
     };
 
     const onStart = () => emit({ type: 'loading', loading: true });
-    // Chromium announces a title when it changes, so a reload keeps the one it
-    // had and says nothing; asking once the load is done is what keeps a tab
-    // named across one. A page with no title of its own answers with its URL.
-    const onStop = () => {
-      emit({ type: 'loading', loading: false });
-      try {
-        const title = view.getTitle();
-        if (title) emit({ type: 'title', title });
-      } catch {
-        // the guest went away under the event; nothing to name
-      }
-    };
+    const onStop = () => emit({ type: 'loading', loading: false });
     const onTitle = (e: Event) =>
       emit({ type: 'title', title: (e as unknown as { title: string }).title });
     const onNavigate = (e: Event) => arrived((e as unknown as { url: string }).url);
@@ -122,8 +110,17 @@ export class WebviewSurfaces implements SurfaceDriver {
       const { isMainFrame, url } = e as unknown as { isMainFrame: boolean; url: string };
       if (isMainFrame) arrived(url);
     };
-    const onFail = (e: Event) =>
-      emit({ type: 'error', message: (e as unknown as { errorDescription: string }).errorDescription });
+    const onFail = (e: Event) => {
+      const { errorCode, errorDescription, isMainFrame } = e as unknown as {
+        errorCode: number;
+        errorDescription: string;
+        isMainFrame: boolean;
+      };
+      // -3 is ERR_ABORTED: a load cut short by the next one, which nobody
+      // needs telling about. A frame inside the page failing is its own affair.
+      if (errorCode === -3 || !isMainFrame) return;
+      emit({ type: 'error', message: errorDescription });
+    };
 
     view.addEventListener('did-start-loading', onStart);
     view.addEventListener('did-stop-loading', onStop);

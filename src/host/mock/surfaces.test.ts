@@ -47,3 +47,16 @@ describe('IframeSurfaces listeners', () => {
     expect(events.some((e) => e.type === 'url' && e.url === 'http://b.test/')).toBe(true);
   });
 });
+
+describe('IframeSurfaces history', () => {
+  it('treats Enter on the address already shown as a reload', async () => {
+    const surfaces = new IframeSurfaces();
+    const events: SurfaceEvent[] = [];
+    surfaces.subscribe('t', (event) => events.push(event));
+    surfaces.mount('t', document.createElement('div'), { url: 'http://a.test/' });
+
+    await surfaces.navigate('t', 'http://a.test/');
+    const urls = events.filter((e) => e.type === 'url');
+    expect(urls[urls.length - 1]).toEqual({ type: 'url', url: 'http://a.test/', canGoBack: false, canGoForward: false });
+  });
+});

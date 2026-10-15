@@ -15,6 +15,7 @@ import { BrowserView } from './BrowserView';
 class FakeSurfaces implements SurfaceDriver {
   mounted: (string | undefined)[] = [];
   navigated: string[] = [];
+  subscriptions = 0;
   back = vi.fn(async () => {});
   forward = vi.fn(async () => {});
   reload = vi.fn(async () => {});
@@ -31,6 +32,7 @@ class FakeSurfaces implements SurfaceDriver {
   }
 
   subscribe(id: string, handler: (event: SurfaceEvent) => void) {
+    this.subscriptions += 1;
     const set = this.listeners.get(id) ?? new Set();
     set.add(handler);
     this.listeners.set(id, set);
@@ -79,6 +81,13 @@ describe('toUrl', () => {
     expect(toUrl('https://a.test/x')).toBe('https://a.test/x');
     expect(toUrl('file:///tmp/a.html')).toBe('file:///tmp/a.html');
     expect(toUrl('about:blank')).toBe('about:blank');
+    expect(toUrl('data:text/html,<h1>hi</h1>')).toBe('data:text/html,<h1>hi</h1>');
+    expect(toUrl('chrome://gpu')).toBe('chrome://gpu');
+  });
+
+  it('knows a port from a scheme', () => {
+    expect(toUrl('example.com:8080/x')).toBe('http://example.com:8080/x');
+    expect(toUrl('localhost:')).toBe('http://localhost:');
   });
 
   it('is nothing for nothing', () => {
@@ -177,6 +186,54 @@ describe('BrowserView', () => {
 
     act(() => surfaces.emit(ID, { type: 'title', title: '  ' }));
     expect(onTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a half-typed address while the page moves on its own', () => {
+    const surfaces = new FakeSurfaces();
+    const { show } = renderView(hostWith(surfaces), tab('http://a.test/'));
+    const input = address();
+    input.focus();
+    fireEvent.change(input, { target: { value: 'localhost:30' } });
+
+    // A hash that follows the scroll, recorded and handed back down.
+    act(() => surfaces.emit(ID, { type: 'url', url: 'http://a.test/#two', canGoBack: false, canGoForward: false }));
+    show(tab('http://a.test/#two'));
+    expect(input.value).toBe('localhost:30');
+
+    // Leaving the bar lets the page's address through.
+    fireEvent.blur(input);
+    expect(input.value).toBe('http://a.test/#two');
+  });
+
+  it('says why a load failed, until the next one starts', () => {
+    const surfaces = new FakeSurfaces();
+    renderView(hostWith(surfaces), tab('http://nosuch.test/'));
+
+    act(() => surfaces.emit(ID, { type: 'error', message: 'ERR_NAME_NOT_RESOLVED' }));
+    expect(screen.getByRole('alert').textContent).toContain('ERR_NAME_NOT_RESOLVED');
+    expect(screen.getByRole('alert').textContent).toContain('http://nosuch.test/');
+
+    act(() => surfaces.emit(ID, { type: 'loading', loading: true }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps one subscription while the pane re-renders with new callbacks', () => {
+    const surfaces = new FakeSurfaces();
+    const host = hostWith(surfaces);
+    const seen: string[] = [];
+    const view = (label: string) => (
+      <HostProvider host={host}>
+        <BrowserView tab={tab('http://a.test/')} onNavigate={(url) => seen.push(label + ':' + url)} onTitle={() => {}} />
+      </HostProvider>
+    );
+    const utils = render(view('first'));
+    utils.rerender(view('second'));
+    utils.rerender(view('third'));
+    expect(surfaces.subscriptions).toBe(1);
+
+    // And the page still reaches the latest callback, not the first.
+    act(() => surfaces.emit(ID, { type: 'url', url: 'http://a.test/x', canGoBack: false, canGoForward: false }));
+    expect(seen).toEqual(['third:http://a.test/x']);
   });
 
   it('offers developer tools on a webview and not on an iframe', () => {

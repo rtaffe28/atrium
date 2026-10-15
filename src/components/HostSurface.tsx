@@ -27,19 +27,16 @@ interface Props {
 export function HostSurface({ id, url }: Props) {
   const host = useHost();
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // What the mount is for: this id, starting at the URL current when the id
-  // arrived. Adjusted during render rather than in an effect, so a surface
-  // handed a new id remounts once, at that tab's URL, without a render in
-  // between where the old page shows under the new address.
-  const [target, setTarget] = useState({ id, url });
-  if (target.id !== id) setTarget({ id, url });
+  // Where this surface started. The browser view is keyed by tab, so a
+  // surface is mounted once per tab, and the URL it was first given is the
+  // only one that matters here.
+  const [startUrl] = useState(url);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    return host.surfaces.mount(target.id, container, { url: target.url });
-  }, [host, target]);
+    return host.surfaces.mount(id, container, { url: startUrl });
+  }, [host, id, startUrl]);
 
   return <div className="surface-host" ref={containerRef} />;
 }

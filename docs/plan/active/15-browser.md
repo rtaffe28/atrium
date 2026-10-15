@@ -48,8 +48,11 @@ the DevTools protocol against a local server built to trigger the loop:
   the second result, which found the request already spent. The focus test
   now runs under StrictMode.
 - Chromium announces a title only when it changes, so a reload said nothing
-  and the tab fell back to its host. The driver asks for the title once a
-  load is done, and the pane resets a name only when the site changes.
+  and the tab fell back to its host. The pane now resets a name only when
+  the site changes, so a reload, a route change or Back keeps the one the
+  page gave.
+- A load that fails says why, under the toolbar, until the next one starts.
+  Before, a typo in the address looked exactly like a slow server.
 - Each browser tab has its own address bar, so switching tabs in a pane no
   longer carries over the last one's draft, spinner and history.
 - Chromium skips history entries a page left without a user gesture, so Back

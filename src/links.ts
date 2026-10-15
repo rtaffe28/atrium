@@ -24,5 +24,7 @@ export function isOpenLinkClick(
 export function toUrl(entry: string): string | null {
   const trimmed = entry.trim();
   if (!trimmed) return null;
-  return /^(https?|file):\/\/|^about:/i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  // A scheme is a word and a colon — unless what follows the colon is a port
+  // number, or nothing: localhost:5173 and example.com:8080/x are hosts.
+  return /^[a-z][a-z0-9+.-]*:(?!\d|$)/i.test(trimmed) ? trimmed : `http://${trimmed}`;
 }

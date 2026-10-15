@@ -59,16 +59,20 @@ export function BrowserView({ tab, onNavigate, onTitle, focusRequest, onOpenLink
   const surfaceKind = useCapability('browserSurface');
   const [draft, setDraft] = useState(tab.url ?? '');
   const [syncedUrl, setSyncedUrl] = useState(tab.url);
+  const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState({ canGoBack: false, canGoForward: false });
   const urlRef = useRef<HTMLInputElement>(null);
+  const selectOnMouseUp = useRef(false);
 
-  // The address bar follows the page. Adjusting state during render is the
-  // documented way to reset on a prop change — cheaper than an effect, and no
-  // cascading render.
+  // The address bar follows the page, except while it is being typed in: a
+  // page that moves on its own — a hash that follows the scroll, a poll that
+  // rewrites the query — must not take a half-typed address away. Adjusting
+  // state during render is the documented way to reset on a prop change.
   if (tab.url !== syncedUrl) {
     setSyncedUrl(tab.url);
-    setDraft(tab.url ?? '');
+    if (!editing) setDraft(tab.url ?? '');
   }
 
   // Claimed here and not during render: React's development mode renders a
@@ -83,27 +87,40 @@ export function BrowserView({ tab, onNavigate, onTitle, focusRequest, onOpenLink
     urlRef.current?.select();
   }, [focusRequest, tab.id]);
 
+  // The pane hands these down as fresh closures on each of its renders, which
+  // is every store change. Read through a ref, they cost one subscription for
+  // the life of the tab rather than one per keystroke in the terminal beside it.
+  const callbacks = useRef({ onNavigate, onTitle, onOpenLink });
+  useEffect(() => {
+    callbacks.current = { onNavigate, onTitle, onOpenLink };
+  });
+
   useEffect(
     () =>
       host.surfaces.subscribe(tab.id, (event) => {
         switch (event.type) {
           case 'loading':
             setLoading(event.loading);
+            if (event.loading) setError(null);
             break;
           case 'url':
             setHistory({ canGoBack: event.canGoBack, canGoForward: event.canGoForward });
-            onNavigate(event.url);
+            setError(null);
+            callbacks.current.onNavigate(event.url);
             break;
           case 'title':
             // A page with no title of its own keeps its host as a name.
-            if (event.title.trim()) onTitle(event.title);
+            if (event.title.trim()) callbacks.current.onTitle(event.title);
+            break;
+          case 'error':
+            setError(event.message);
             break;
           case 'open':
-            onOpenLink?.(event.url);
+            callbacks.current.onOpenLink?.(event.url);
             break;
         }
       }),
-    [host, tab.id, onNavigate, onTitle, onOpenLink],
+    [host, tab.id],
   );
 
   if (surfaceKind === 'none') {
@@ -132,6 +149,28 @@ export function BrowserView({ tab, onNavigate, onTitle, focusRequest, onOpenLink
     // The first Escape puts the page's URL back; a second leaves the bar.
     if (draft !== (tab.url ?? '')) setDraft(tab.url ?? '');
     else urlRef.current?.blur();
+  };
+
+  // Focus selects the whole address, as a browser's does. When the focus came
+  // from a click, Chromium's default mouseup would then collapse the selection
+  // to a caret where the click landed; that one mouseup is swallowed. A click
+  // into a bar that already has focus places the caret as usual.
+  const onMouseDown = (event: React.MouseEvent<HTMLInputElement>) => {
+    selectOnMouseUp.current = document.activeElement !== event.currentTarget;
+  };
+  const onMouseUp = (event: React.MouseEvent<HTMLInputElement>) => {
+    if (!selectOnMouseUp.current) return;
+    selectOnMouseUp.current = false;
+    event.preventDefault();
+  };
+  const onFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    setEditing(true);
+    event.currentTarget.select();
+  };
+  const onBlur = () => {
+    setEditing(false);
+    selectOnMouseUp.current = false;
+    setDraft(tab.url ?? '');
   };
 
   // window.open from the app's own window never opens a window: under
@@ -168,7 +207,10 @@ export function BrowserView({ tab, onNavigate, onTitle, focusRequest, onOpenLink
             spellCheck={false}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            onFocus={(e) => e.currentTarget.select()}
+            onMouseDown={onMouseDown}
+            onMouseUp={onMouseUp}
+            onFocus={onFocus}
+            onBlur={onBlur}
             placeholder="Enter a URL"
             aria-label="Address"
           />
@@ -180,6 +222,11 @@ export function BrowserView({ tab, onNavigate, onTitle, focusRequest, onOpenLink
           nav('Developer tools', ICON.devtools, () => void host.surfaces.toggleDevTools(tab.id), !tab.url)}
         {nav('Open in external browser', ICON.external, openExternal, !tab.url)}
       </form>
+      {error && (
+        <div className="browser-error" role="alert">
+          Could not load {tab.url}: {error}
+        </div>
+      )}
       {tab.url ? (
         <HostSurface id={tab.id} url={tab.url} />
       ) : (
