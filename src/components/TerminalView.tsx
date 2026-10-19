@@ -119,16 +119,18 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
     // for vim, readline and agents' own cancel handling, and swallowing it to
     // synthesise an interrupt breaks all three. Ctrl-C already does the right
     // thing without our help — xterm sends 0x03 and the line discipline turns
-    // it into SIGINT for the foreground group. The one key re-encoded on the
-    // way is Shift+Enter, which xterm would send as a bare CR, identical to
-    // Enter; see keyboard/terminal.ts. It still reaches the pty, as bytes an
-    // agent can tell apart.
+    // it into SIGINT for the foreground group. The keys re-encoded on the way
+    // are Shift+Enter, which xterm would send as a bare CR, identical to
+    // Enter, and on macOS the Option and Cmd line-editing keys, which xterm
+    // sends as bytes a shell does not read, or not at all; see
+    // keyboard/terminal.ts. They still reach the pty, as bytes the program
+    // can act on.
     term.attachCustomKeyEventHandler((event) => {
-      const sequence = encodeKey(event);
+      const sequence = encodeKey(event, platform);
       if (sequence === null) return true;
       if (event.type === 'keydown') {
         // Cancelling the keydown stops the keypress that would follow, which
-        // xterm would encode as the plain Enter being replaced.
+        // xterm would encode as the plain key being replaced.
         event.preventDefault();
         term.input(sequence);
       }

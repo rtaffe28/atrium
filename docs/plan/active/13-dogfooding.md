@@ -127,6 +127,38 @@ which the preload answers from `webUtils.getPathForFile` and a browser tab
 answers with null. A drop anywhere else in the window is refused rather than
 navigated to.
 
+## 6. Option+Left typed `;3D` into the shell — fixed
+
+At a shell prompt, Option+Left put `;3D` on the line instead of moving back a
+word, and Ctrl+Left put `;5D`. Cmd+Left did nothing. In Terminal.app, iTerm2
+and Ghostty the same keys move by a word and to the ends of the line.
+
+xterm.js 6 encodes Option+Left as CSI 1;3D — xterm 5 had a special case that
+sent ESC b for it on macOS, and 6 does not — and sends nothing for Cmd with an
+arrow, leaving the Cmd key to the application. zsh has no default binding for
+CSI 1;3D, beeps, and inserts what is left after the ESC `[` `1`. Claude Code
+reads both sequences correctly, so the garbage only ever appeared at a shell
+prompt; a line typed there and pasted into Claude is how it was reported.
+
+**What was done.** `encodeKey()` in `src/keyboard/terminal.ts` sends, on
+macOS, what those terminals send: ESC b and ESC f for Option+Left and
+Option+Right, which zsh, bash, readline and Claude Code all read as word
+movement without setup, and Ctrl+A, Ctrl+E and Ctrl+U for Cmd+Left, Cmd+Right
+and Cmd+Backspace — Ghostty's defaults for start of line, end of line, and
+delete to the start. Only the chord with exactly that modifier is re-encoded;
+Shift+Option+Left stays xterm's. The bytes were checked against zsh and
+Claude Code in a pty before the handler was written.
+
+Not done: Ctrl+Left and Ctrl+Right. xterm's CSI 1;5D and 1;5C is what every
+terminal sends for them and what vim, Claude Code and anything else that binds
+them expects, so a zsh that echoes `;5D` wants the two lines in its rc file
+it would want under Terminal.app too:
+
+```
+bindkey '^[[1;5D' backward-word
+bindkey '^[[1;5C' forward-word
+```
+
 ## Why these are here rather than in an issue tracker
 
 Both were found by using the thing, not by reading it, and that is the argument
