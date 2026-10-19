@@ -1,7 +1,8 @@
 /**
  * What xterm would otherwise send indistinguishably, or not at all.
  *
- * Keys first. encodePaste(), below, is the same question for the clipboard.
+ * Keys first. encodePaste() and encodeDrop(), below, are the same question
+ * for the clipboard and for files dropped from the desktop.
  *
  * xterm.js encodes Shift+Enter as a bare carriage return — the same byte as
  * Enter — so a program that means Shift+Enter as "new line, not submit" never
@@ -54,4 +55,29 @@ export function encodePaste(data: DataTransfer | null): string | null {
     type.startsWith('image/'),
   );
   return image ? '\x16' : null;
+}
+
+/**
+ * What to type for files dropped onto the terminal.
+ *
+ * Terminal.app and iTerm2 type a dropped file's path at the cursor, escaped
+ * so the shell reads it as one word, and Claude Code's own tip — "you can
+ * drag and drop image files into your terminal" — relies on exactly that: it
+ * reads an image from the path it is handed. xterm.js does nothing with a
+ * drop, and Electron's default for one is to navigate the window to the
+ * file. So the paths are typed here, a backslash before anything a shell
+ * would read as more than a character, each followed by a space so the next
+ * word — or the next drop — starts clean.
+ *
+ * Returns the text to paste, or null when nothing was dropped that has a
+ * path.
+ */
+export function encodeDrop(paths: string[]): string | null {
+  if (paths.length === 0) return null;
+  return paths.map((path) => `${escapeForShell(path)} `).join('');
+}
+
+/** A backslash before every character outside the set a shell takes as-is. */
+function escapeForShell(path: string): string {
+  return path.replace(/[^\p{L}\p{N}_\-./+,:@%]/gu, (c) => `\\${c}`);
 }

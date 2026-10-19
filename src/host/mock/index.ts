@@ -61,6 +61,11 @@ class BrowserFiles implements FileDriver {
   async chooseDirectory(): Promise<string | null> {
     return null;
   }
+
+  /** A browser is handed a dropped file's bytes, never its path. */
+  pathOf(): string | null {
+    return null;
+  }
 }
 
 export class MockHost implements Host {

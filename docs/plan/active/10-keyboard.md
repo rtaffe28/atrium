@@ -54,8 +54,10 @@ text and nothing else, so Cmd+V on a screenshot — an image with no text beside
 it — did nothing at all. Claude Code reads images from the clipboard itself
 when it is sent Ctrl+V, its image-paste key, so a paste with an image and no
 text becomes that byte, and a paste with any text in it is still xterm's. In a
-shell the byte is quoted-insert, which waits for a key and is harmless. See
-[`13-dogfooding.md`](13-dogfooding.md).
+shell the byte is quoted-insert, which waits for a key and is harmless. A file
+dropped on a terminal is typed as its path, escaped for the shell, as
+Terminal.app and iTerm2 do; Claude Code reads an image from a path it is
+given. See [`13-dogfooding.md`](13-dogfooding.md).
 
 ## Rebinding
 

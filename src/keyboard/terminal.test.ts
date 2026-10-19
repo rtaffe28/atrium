@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeKey, encodePaste } from './terminal';
+import { encodeDrop, encodeKey, encodePaste } from './terminal';
 
 const key = (init: KeyboardEventInit) => new KeyboardEvent('keydown', init);
 
@@ -50,5 +50,32 @@ describe('encodePaste', () => {
     expect(encodePaste(clipboard('', []))).toBeNull();
     expect(encodePaste(clipboard('', ['text/html']))).toBeNull();
     expect(encodePaste(null)).toBeNull();
+  });
+});
+
+describe('encodeDrop', () => {
+  it('types a dropped path followed by a space', () => {
+    expect(encodeDrop(['/Users/ryan/shot.png'])).toBe('/Users/ryan/shot.png ');
+  });
+
+  it('escapes what a shell would read as more than a character', () => {
+    expect(encodeDrop(['/Users/ryan/Screen Shot (1).png'])).toBe(
+      '/Users/ryan/Screen\\ Shot\\ \\(1\\).png ',
+    );
+    expect(encodeDrop(["/tmp/it's $HOME & more;.txt"])).toBe(
+      "/tmp/it\\'s\\ \\$HOME\\ \\&\\ more\\;.txt ",
+    );
+  });
+
+  it('leaves letters in any script alone', () => {
+    expect(encodeDrop(['/Users/ryan/écran 日本.png'])).toBe('/Users/ryan/écran\\ 日本.png ');
+  });
+
+  it('types several files one after another', () => {
+    expect(encodeDrop(['/a/one.png', '/a/two.png'])).toBe('/a/one.png /a/two.png ');
+  });
+
+  it('has nothing to type for a drop with no paths', () => {
+    expect(encodeDrop([])).toBeNull();
   });
 });

@@ -105,6 +105,23 @@ function Workspace() {
   );
   useEffect(() => host.window.subscribe((state) => setWindowFocused(state.focused)), [host]);
 
+  // A file dropped anywhere but a terminal goes nowhere. Left to Electron, a
+  // drop the page did not claim navigates the window to the file — and the
+  // window is where every terminal lives. Terminals claim theirs first and
+  // stop it here; see TerminalView.
+  useEffect(() => {
+    const refuse = (event: DragEvent) => {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+    };
+    window.addEventListener('dragover', refuse);
+    window.addEventListener('drop', refuse);
+    return () => {
+      window.removeEventListener('dragover', refuse);
+      window.removeEventListener('drop', refuse);
+    };
+  }, []);
+
   // The tab in front of you, as a terminal means it: the active tab of the
   // focused pane, in a window that has focus. It is never alerted for, and
   // looking at a tab is what clears its mark.

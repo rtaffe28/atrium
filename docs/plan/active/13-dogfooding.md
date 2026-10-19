@@ -1,6 +1,6 @@
 # Developing Atrium in Atrium: what it exposes
 
-**Status: four frictions found so far, all now fixed.** The workflow itself
+**Status: five frictions found so far, all now fixed.** The workflow itself
 works — `581a3de` gave a dev run its own `userData`, nothing takes a
 single-instance lock, and the recipe is in the root README. What follows is
 what using it turned up, and what closing each one took. All were small. All
@@ -107,6 +107,25 @@ Another program's name takes over once it has exited, which clears its title
 as the shell comes back, or its tab has left the session. The flicker was the
 symptom; the rule it exposed is the fix: a session named after an agent does
 not change its name because a second agent started working beside it.
+
+## 5. A file could not be dropped onto a terminal — fixed
+
+Dragging a file from the Finder onto a Claude tab did nothing useful, where
+Terminal.app and iTerm2 type its path at the cursor — and Claude Code's own
+tip, *you can drag and drop image files into your terminal*, assumes a
+terminal does. xterm.js does nothing with a drop, and Electron's default for a
+drop the page does not claim is to navigate the window to the file, which is
+the window every terminal lives in.
+
+**What was done.** A terminal claims the drag and types the dropped paths,
+escaped the way those terminals escape them — a backslash before anything a
+shell reads as more than a character — each followed by a space
+(`encodeDrop()` in `src/keyboard/terminal.ts`), and takes focus so what you
+type next goes after them. The path is the one thing a browser is not given
+with a dropped file, so it comes through the host seam: `FileDriver.pathOf()`,
+which the preload answers from `webUtils.getPathForFile` and a browser tab
+answers with null. A drop anywhere else in the window is refused rather than
+navigated to.
 
 ## Why these are here rather than in an issue tracker
 
