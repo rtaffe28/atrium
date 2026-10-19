@@ -100,6 +100,13 @@ export interface SurfaceDriver {
  */
 export interface FileDriver {
   chooseDirectory(): Promise<string | null>;
+  /**
+   * Where a file the OS dropped into the window lives on disk.
+   *
+   * Null where the host cannot know — a browser tab is handed the bytes and
+   * nothing else — and the drop then has nothing to type.
+   */
+  pathOf(file: File): string | null;
 }
 
 // ── notifications ──────────────────────────────────────────────────────────

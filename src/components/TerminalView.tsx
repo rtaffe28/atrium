@@ -6,7 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useHost } from '../host/context';
-import { encodeKey } from '../keyboard/terminal';
+import { encodeDrop, encodeKey, encodePaste } from '../keyboard/terminal';
 import { isResizing, onSettled } from '../layout/settle';
 import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
@@ -62,7 +62,8 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
   const termRef = useRef<Terminal | null>(null);
   const { settings } = useSettings();
   const fontSize = settings.terminalFontSize;
-  const platform = useHost().window.platform();
+  const { window: hostWindow, files } = useHost();
+  const platform = hostWindow.platform();
   // Read through a ref so a new callback each render does not tear down the
   // terminal it is wired into.
   const openLinkRef = useRef(onOpenLink);
@@ -134,6 +135,43 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
       return false;
     });
 
+    // A paste xterm cannot carry — an image with no text, which is what a
+    // screenshot is — went nowhere. It is sent on as Ctrl+V instead, the key
+    // Claude Code reads the clipboard's image on; see keyboard/terminal.ts.
+    // Capturing, so it is decided before xterm's own paste handling runs.
+    const pasted = (event: ClipboardEvent) => {
+      const sequence = encodePaste(event.clipboardData);
+      if (sequence === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      term.input(sequence);
+    };
+    host.addEventListener('paste', pasted, true);
+
+    // Files dropped from the desktop are typed as their paths, as Terminal.app
+    // and iTerm2 do and as Claude Code expects of a terminal; see
+    // keyboard/terminal.ts. The drag has to be claimed first or the drop never
+    // comes, and a drop nobody claims navigates the window to the file.
+    const carriesFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files');
+    const draggedOver = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer!.dropEffect = 'copy';
+    };
+    const dropped = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const paths = Array.from(event.dataTransfer!.files, (file) => files.pathOf(file));
+      const text = encodeDrop(paths.filter((path): path is string => path !== null));
+      if (text === null) return;
+      term.paste(text);
+      term.focus();
+    };
+    host.addEventListener('dragover', draggedOver);
+    host.addEventListener('drop', dropped);
+
     const detach = driver.attach(tabId, (chunk) => term.write(chunk));
     const typed = term.onData((data) => driver.write(tabId, data));
 
@@ -164,12 +202,15 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
       cancelAnimationFrame(frame);
       settled();
       observer.disconnect();
+      host.removeEventListener('paste', pasted, true);
+      host.removeEventListener('dragover', draggedOver);
+      host.removeEventListener('drop', dropped);
       typed.dispose();
       detach();
       term.dispose();
       termRef.current = null;
     };
-  }, [tabId, driver, fontSize, platform]);
+  }, [tabId, driver, fontSize, platform, files]);
 
   useEffect(() => {
     if (claimFocus(focusRequest ?? null, tabId)) termRef.current?.focus();

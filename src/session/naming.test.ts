@@ -127,3 +127,62 @@ describe("a session's name", () => {
     expect(store.list().find((s) => s.id === id)?.title).toBe('Bug 412');
   });
 });
+
+describe('with two programs in one session', () => {
+  /** A second terminal beside the first, as a split makes; both run agents. */
+  function openTwo() {
+    const { store, id, tabId: first, name } = open();
+    const groupId = Object.keys(store.list()[0].groups)[0];
+    const second = store.addTab(id, groupId, 'terminal').id;
+    store.feed(first, title('◐ Fix the bug'));
+    store.feed(second, title('◐ Add the feature'));
+    return { store, id, first, second, name };
+  }
+
+  it('is named after the one that named it, not whichever wrote last', () => {
+    const { store, first, second, name } = openTwo();
+    expect(name()).toBe('Fix the bug');
+
+    // Both spinners keep turning. The name must not turn with them.
+    const seen = new Set<string>();
+    store.subscribe((sessions) => seen.add(sessions[0].title));
+    for (const frame of ['◓', '◑', '◒', '◐']) {
+      store.feed(second, title(`${frame} Add the feature`));
+      store.feed(first, title(`${frame} Fix the bug`));
+    }
+    expect([...seen]).toEqual(['Fix the bug']);
+  });
+
+  it('still follows that one when it changes its mind', () => {
+    const { store, first, second, name } = openTwo();
+    store.feed(first, title('◑ Fix the bug and its test'));
+    expect(name()).toBe('Fix the bug and its test');
+    store.feed(second, title('◑ Add the feature'));
+    expect(name()).toBe('Fix the bug and its test');
+  });
+
+  it('passes to the other once the first has exited', () => {
+    const { store, first, second, name } = openTwo();
+    store.feed(first, exited);
+    expect(name(), 'kept until something else is working').toBe('Fix the bug');
+
+    store.feed(second, title('◑ Add the feature'));
+    expect(name()).toBe('Add the feature');
+  });
+
+  it('passes to the other once the first is closed', () => {
+    const { store, id, first, second, name } = openTwo();
+    store.closeTab(id, first);
+    store.feed(second, title('◑ Add the feature'));
+    expect(name()).toBe('Add the feature');
+  });
+
+  it('is kept by the first across a restart, once it is back', () => {
+    const { store, first, second } = openTwo();
+    const next = restored(store);
+    // Both agents resume and announce themselves; only the second is working.
+    next.feed(first, title('✳ Fix the bug'));
+    next.feed(second, title('◐ Add the feature'));
+    expect(next.list()[0].title).toBe('Fix the bug');
+  });
+});

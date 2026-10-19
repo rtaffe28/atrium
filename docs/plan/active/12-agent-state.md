@@ -33,7 +33,7 @@ never claims anything the program did not.
 | The program sends | Atrium shows | Until |
 |---|---|---|
 | OSC 0 / 2 — title | the tab's name | another title, or the shell is back (OSC 133 D / A) |
-| that title, while the tab is working | the session's name on the rail, unless the user gave it one | never — it is the session's name now |
+| that title, while the tab is working | the session's name on the rail, unless the user gave it one or another program in the session still holds it | never — it is the session's name now |
 | a spinner frame in that title, or OSC 9;4 progress | **Working** on the session in the rail, a dot on the tab | the spinner leaves the title, `9;4;0`, the shell is back — by its OSC 133 mark, or as the foreground process — or the pty exits |
 | BEL — a real one, not an OSC terminator | a mark on the tab and its session; a tone if *Bell sound* is on | you look at the tab |
 | OSC 9 / 777 / 99 — a notification | the same mark, and a desktop notification if *Desktop notifications* is on; clicking it opens the tab | you look at the tab |
@@ -67,6 +67,14 @@ settle still counts. And a name the user typed is theirs: `renameSession()`
 marks the session `named`, and no program renames it after that. There is no
 way back to automatic naming for that session short of a new one, which has
 not come up.
+
+And one session follows one program. Two agents side by side in a split each
+put their own name in their title, and a session that took whichever was
+written last was renamed to and fro with every frame of each one's spinner —
+found the first time two Claudes shared a session. The session records which
+tab named it (`namedBy`, saved with the session), and that program keeps the
+name for as long as it has a title; another's takes over once it has exited,
+which takes its title with it, or its tab has left the session.
 
 This is cmux's model — a process title the workspace follows until a custom
 title is set, with the custom title's provenance recorded so an automatic one

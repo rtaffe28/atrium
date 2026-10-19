@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 /**
  * The bridge.
@@ -71,6 +71,10 @@ const bridge = {
 
   files: {
     choose: (): Promise<string | null> => ipcRenderer.invoke('files:choose'),
+    // Where a File the OS dropped into the window lives on disk. Synchronous,
+    // and answered here: the renderer's File has no path of its own since
+    // Electron 32, and only the preload may ask webUtils.
+    pathOf: (file: File): string => webUtils.getPathForFile(file),
   },
 
   notify: {

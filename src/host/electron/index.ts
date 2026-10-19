@@ -107,6 +107,15 @@ class ElectronFiles implements FileDriver {
   chooseDirectory() {
     return this.bridge.files.choose();
   }
+
+  pathOf(file: File): string | null {
+    try {
+      return this.bridge.files.pathOf(file) || null;
+    } catch {
+      // A File that did not come from disk — one a page built — has no path.
+      return null;
+    }
+  }
 }
 
 export class ElectronHost implements Host {

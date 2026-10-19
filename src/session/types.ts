@@ -126,6 +126,13 @@ export interface Session {
    * a name someone chose is not to be replaced by one a program came up with.
    */
   named?: boolean;
+  /**
+   * The tab whose program the title was copied from, until the user names
+   * the session. It keeps the name while its program has a title, so two
+   * agents in one session do not rename it to and fro — see
+   * SessionStore.nameSession().
+   */
+  namedBy?: string;
   cwd: string;
   branch: string;
   createdAt: number;

@@ -1,9 +1,9 @@
 # Developing Atrium in Atrium: what it exposes
 
-**Status: two frictions found on the first day, both now fixed.** The workflow
-itself works — `581a3de` gave a dev run its own `userData`, nothing takes a
+**Status: five frictions found so far, all now fixed.** The workflow itself
+works — `581a3de` gave a dev run its own `userData`, nothing takes a
 single-instance lock, and the recipe is in the root README. What follows is
-what using it turned up, and what closing each one took. Both were small. Both
+what using it turned up, and what closing each one took. All were small. All
 were the kind of thing that costs a little every hour rather than failing
 loudly once, which is why they wanted writing down rather than remembering.
 
@@ -62,6 +62,70 @@ from the `.desktop` file for the installed app, and from whatever Electron
 picks for an unpackaged run, so making them differ means a second icon in the
 build. The title-bar marker plus the empty `atrium-dev` rail is enough to tell
 them apart in practice; revisit the icon only if that turns out to be wrong.
+
+## 3. A screenshot could not be pasted into Claude — fixed
+
+Cmd+V with a screenshot on the clipboard did nothing: no image in the prompt,
+no error, nothing in the terminal. Text pasted fine. The same screenshot goes
+into Claude Code in Terminal.app or iTerm2 with Ctrl+V, which is the key
+Claude Code documents for images on macOS — a terminal's Cmd+V pastes text,
+and an image has none.
+
+Two things were true at once. xterm.js handles a paste by reading the
+clipboard's `text/plain` and writing it to the pty, and an image on its own
+has no text, so the paste was dropped before it reached anything. And Ctrl+V
+worked in Atrium all along — xterm sends `0x16` for it and nothing in the app
+takes it — but nothing said so, and Cmd+V is what a Mac app's Edit menu
+offers.
+
+**What was done.** `encodePaste()` in `src/keyboard/terminal.ts`, beside the
+Shift+Enter re-encoding: a paste with an image and no text becomes `0x16`,
+the byte Ctrl+V sends, which is Claude Code's cue to read the clipboard image
+itself and attach it. A paste with any text in it is still xterm's to make,
+image or not — the text is what was asked for. The handler is a capturing
+listener on the terminal's host element, so it is decided before xterm's own
+paste handling sees the event. In a shell the byte is quoted-insert, which
+waits for a key and is harmless; the image was going nowhere there either.
+
+Not done: writing the image to a file and pasting its path, which would work
+for any program that takes a path. Claude Code's own clipboard read gives it
+the image as an attachment rather than a path to go and open, and costs one
+byte rather than a temp file to manage.
+
+## 4. Two Claudes in one session fought over its name — fixed
+
+With two agents side by side in a split, the session's name on the rail
+flickered between the two conversations' names. Each Claude writes its own
+name into its title with a spinner in front of it, and every frame of either
+spinner reached `nameSession()`, which took whichever title had just been
+written. Two agents meant two names, swapped several times a second.
+
+**What was done.** One session follows one program. The session records which
+tab named it — `namedBy`, saved with the session so a restart does not reopen
+the question — and that program keeps the name for as long as it has a title.
+Another program's name takes over once it has exited, which clears its title
+as the shell comes back, or its tab has left the session. The flicker was the
+symptom; the rule it exposed is the fix: a session named after an agent does
+not change its name because a second agent started working beside it.
+
+## 5. A file could not be dropped onto a terminal — fixed
+
+Dragging a file from the Finder onto a Claude tab did nothing useful, where
+Terminal.app and iTerm2 type its path at the cursor — and Claude Code's own
+tip, *you can drag and drop image files into your terminal*, assumes a
+terminal does. xterm.js does nothing with a drop, and Electron's default for a
+drop the page does not claim is to navigate the window to the file, which is
+the window every terminal lives in.
+
+**What was done.** A terminal claims the drag and types the dropped paths,
+escaped the way those terminals escape them — a backslash before anything a
+shell reads as more than a character — each followed by a space
+(`encodeDrop()` in `src/keyboard/terminal.ts`), and takes focus so what you
+type next goes after them. The path is the one thing a browser is not given
+with a dropped file, so it comes through the host seam: `FileDriver.pathOf()`,
+which the preload answers from `webUtils.getPathForFile` and a browser tab
+answers with null. A drop anywhere else in the window is refused rather than
+navigated to.
 
 ## Why these are here rather than in an issue tracker
 

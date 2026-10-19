@@ -52,6 +52,7 @@ export interface AtriumBridge {
   };
   files: {
     choose(): Promise<string | null>;
+    pathOf(file: File): string;
   };
   notify: {
     post(notice: { title: string; body: string; tag: string }): Promise<void>;

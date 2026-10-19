@@ -294,7 +294,7 @@ export abstract class SessionStore implements SessionDriver {
       (key) => JSON.stringify(patch[key]) !== JSON.stringify(tab[key]),
     );
     if (changed) this.patchTab(session.id, tabId, patch);
-    if ('programTitle' in patch) this.nameSession(session, tab, { ...tab, ...patch });
+    if ('programTitle' in patch) this.nameSession(session, tabId, tab, { ...tab, ...patch });
 
     if (alerts.length > 0) this.lastRequest.set(tabId, Date.now());
     for (const alert of alerts) this.emitAlert(tabId, alert);
@@ -315,13 +315,22 @@ export abstract class SessionStore implements SessionDriver {
    * it exited. And one the user typed is theirs; a program's never replaces
    * it. Working is the same reading as the rail's tag, isWorking(), taken
    * before and after the change so a title that stops spinning still counts.
+   *
+   * And one session follows one program. Two agents side by side in a split
+   * each put their own name in their title, and a session that took whichever
+   * was written last was renamed to and fro with every frame of each one's
+   * spinner. The program the session is named after keeps the name for as
+   * long as it has a title; another's takes over once it has exited — the
+   * title goes with it — or its tab has left the session.
    */
-  private nameSession(session: Session, before: Tab, after: Tab): void {
+  private nameSession(session: Session, tabId: string, before: Tab, after: Tab): void {
     if (session.named) return;
     if (!isWorking(before) && !isWorking(after)) return;
     const name = plain(after.programTitle);
     if (!name || name === session.title) return;
-    this.update(session.id, (s) => ({ ...s, title: name }));
+    const namer = session.namedBy === tabId ? undefined : session.tabs[session.namedBy ?? ''];
+    if (namer?.programTitle !== undefined) return;
+    this.update(session.id, (s) => ({ ...s, title: name, namedBy: tabId }));
   }
 
   private emitAlert(tabId: string, alert: Alert): void {
