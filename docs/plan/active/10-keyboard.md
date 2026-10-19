@@ -41,13 +41,21 @@ problem: `Ctrl+N` and `Ctrl+W` collide with things people type. Both platforms'
 terminals solve it the same way and we should follow — `Ctrl+Shift+` for app
 commands, leaving plain `Ctrl+` to the terminal.
 
-The one key below `Mod` the app touches is Shift+Enter, and it still goes to
-the terminal. xterm.js encodes it as a bare carriage return, the same byte as
-Enter, so Claude Code could not tell "new line" from "send". The terminal now
+The keys below `Mod` the app touches still go to the terminal, re-encoded.
+Shift+Enter: xterm.js encodes it as a bare carriage return, the same byte as
+Enter, so Claude Code could not tell "new line" from "send". The terminal
 sends ESC CR for it — what Claude Code's own `/terminal-setup` binds
 Shift+Enter to in VS Code, Zed and Alacritty, and what Alt+Enter already
-sends — and lets every other key through untouched. `src/keyboard/terminal.ts`
-is the whole of it, and a test holds the pass-through for Escape.
+sends. And on macOS, the line-editing keys: Option+Left and Option+Right send
+ESC b and ESC f, as Terminal.app, iTerm2 and Ghostty do, and Cmd+Left,
+Cmd+Right and Cmd+Backspace send Ctrl+A, Ctrl+E and Ctrl+U, as Ghostty does.
+xterm.js 6 sends CSI 1;3D for Option+Left, which a zsh with no bindkey for it
+echoes as `;3D`, and nothing at all for Cmd with an arrow. Ctrl+Left and
+Ctrl+Right are left as xterm sends them, CSI 1;5D and 1;5C, because that is
+what every terminal sends and what programs that bind them expect; a shell
+that echoes `;5D` wants a `bindkey`, here as anywhere. Every other key goes
+through untouched. `src/keyboard/terminal.ts` is the whole of it, and a test
+holds the pass-through for Escape.
 
 The same module takes the one paste xterm.js drops. It pastes the clipboard's
 text and nothing else, so Cmd+V on a screenshot — an image with no text beside

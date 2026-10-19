@@ -1,3 +1,5 @@
+import type { Platform } from '../host/types';
+
 /**
  * What xterm would otherwise send indistinguishably, or not at all.
  *
@@ -12,24 +14,55 @@
  * same xterm already sends here for Alt+Enter. Sending it for Shift+Enter is
  * what those terminals do after setup, without the setup.
  *
+ * On macOS the line-editing keys are the other gap. Terminal.app, iTerm2 and
+ * Ghostty send ESC b and ESC f for Option+Left and Option+Right — the Emacs
+ * word-movement keys that zsh, bash, readline and Claude Code all read
+ * without setup — and Ghostty also sends Ctrl+A, Ctrl+E and Ctrl+U for
+ * Cmd+Left, Cmd+Right and Cmd+Backspace: start of line, end of line, and
+ * delete to the start. xterm.js 6 encodes Option+Left as CSI 1;3D, which a
+ * zsh with no bindkey for it echoes as `;3D`, and sends nothing at all for
+ * Cmd with an arrow. The table below sends what those terminals send.
+ * Ctrl+Left and Ctrl+Right stay xterm's CSI 1;5D and 1;5C: that is what every
+ * terminal sends for them, programs that bind them expect it, and a shell
+ * that echoes `;5D` wants the same `bindkey` it would want anywhere else.
+ *
  * Returns the bytes to send instead of letting xterm encode the key, or null
  * to let xterm encode it as it normally would. Everything else — Escape above
  * all — stays with xterm; see the rule in docs/plan/active/10-keyboard.md.
  */
-export function encodeKey(event: KeyboardEvent): string | null {
+export function encodeKey(event: KeyboardEvent, platform: Platform): string | null {
   // Enter mid-composition confirms the IME's text; it is not a key for the
   // pty, and xterm knows how to let the composition finish.
   if (event.isComposing) return null;
-  if (
-    event.key === 'Enter' &&
-    event.shiftKey &&
-    !event.ctrlKey &&
-    !event.altKey &&
-    !event.metaKey
-  ) {
-    return '\x1b\r';
-  }
+  const chord = `${modifiers(event)}+${event.key}`;
+  if (chord === 'Shift+Enter') return '\x1b\r';
+  if (platform === 'mac') return MAC_EDITING_KEYS[chord] ?? null;
   return null;
+}
+
+/**
+ * The Mac line-editing keys and the bytes Ghostty sends for them, keyed by
+ * the chord with exactly that one modifier held. Shift+Option+Left is not
+ * Option+Left, and stays with xterm.
+ */
+const MAC_EDITING_KEYS: Record<string, string> = {
+  'Alt+ArrowLeft': '\x1bb',
+  'Alt+ArrowRight': '\x1bf',
+  'Meta+ArrowLeft': '\x01',
+  'Meta+ArrowRight': '\x05',
+  'Meta+Backspace': '\x15',
+};
+
+/** The modifiers held, in one fixed order, so each chord has one spelling. */
+function modifiers(event: KeyboardEvent): string {
+  return [
+    event.ctrlKey && 'Ctrl',
+    event.altKey && 'Alt',
+    event.shiftKey && 'Shift',
+    event.metaKey && 'Meta',
+  ]
+    .filter(Boolean)
+    .join('+');
 }
 
 

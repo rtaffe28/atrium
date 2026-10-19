@@ -56,6 +56,20 @@ describe('terminal key handling', () => {
     expect(sent()).toEqual(['\x1b\r']);
   });
 
+  it('sends ESC b for Option+Left on macOS, where xterm would send a sequence the shell echoes', () => {
+    const agent = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh)', configurable: true });
+    try {
+      const handler = openTerminal();
+      const event = press({ key: 'ArrowLeft', altKey: true });
+      expect(handler(event)).toBe(false);
+      expect(event.defaultPrevented, 'xterm must not also send CSI 1;3D').toBe(true);
+      expect(sent()).toEqual(['\x1bb']);
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { value: agent, configurable: true });
+    }
+  });
+
   it('sends it once per press, and keeps every phase of the key from xterm', () => {
     const handler = openTerminal();
     handler(press({ key: 'Enter', shiftKey: true }));
