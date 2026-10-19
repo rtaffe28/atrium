@@ -6,7 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { claimFocus, type FocusRequest } from '../focusRequest';
 import { useHost } from '../host/context';
-import { encodeKey } from '../keyboard/terminal';
+import { encodeKey, encodePaste } from '../keyboard/terminal';
 import { isResizing, onSettled } from '../layout/settle';
 import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
@@ -134,6 +134,19 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
       return false;
     });
 
+    // A paste xterm cannot carry — an image with no text, which is what a
+    // screenshot is — went nowhere. It is sent on as Ctrl+V instead, the key
+    // Claude Code reads the clipboard's image on; see keyboard/terminal.ts.
+    // Capturing, so it is decided before xterm's own paste handling runs.
+    const pasted = (event: ClipboardEvent) => {
+      const sequence = encodePaste(event.clipboardData);
+      if (sequence === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      term.input(sequence);
+    };
+    host.addEventListener('paste', pasted, true);
+
     const detach = driver.attach(tabId, (chunk) => term.write(chunk));
     const typed = term.onData((data) => driver.write(tabId, data));
 
@@ -164,6 +177,7 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
       cancelAnimationFrame(frame);
       settled();
       observer.disconnect();
+      host.removeEventListener('paste', pasted, true);
       typed.dispose();
       detach();
       term.dispose();

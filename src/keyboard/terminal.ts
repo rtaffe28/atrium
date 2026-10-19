@@ -1,5 +1,7 @@
 /**
- * Keys the terminal would otherwise send indistinguishably.
+ * What xterm would otherwise send indistinguishably, or not at all.
+ *
+ * Keys first. encodePaste(), below, is the same question for the clipboard.
  *
  * xterm.js encodes Shift+Enter as a bare carriage return — the same byte as
  * Enter — so a program that means Shift+Enter as "new line, not submit" never
@@ -27,4 +29,29 @@ export function encodeKey(event: KeyboardEvent): string | null {
     return '\x1b\r';
   }
   return null;
+}
+
+
+/**
+ * What to send for a paste xterm would drop.
+ *
+ * xterm pastes the clipboard's text and nothing else, so pasting an image on
+ * its own — a screenshot, which has no text beside it — did nothing, with no
+ * sign that anything had been tried. Claude Code takes images from the
+ * clipboard itself: Ctrl+V is its image-paste key everywhere but Windows,
+ * and on being sent that byte it reads the clipboard and attaches what it
+ * finds. So an image with no text to paste becomes that byte, and Cmd+V on a
+ * screenshot does what Ctrl+V would have. In a shell the same byte is
+ * quoted-insert, which waits for a key and is harmless; the image was going
+ * nowhere there either.
+ *
+ * Returns the bytes to send, or null to let xterm paste the text as it
+ * always has — which it does whenever there is text, image or not.
+ */
+export function encodePaste(data: DataTransfer | null): string | null {
+  if (!data || data.getData('text/plain')) return null;
+  const image = Array.from(data.items, (item) => item.type).some((type) =>
+    type.startsWith('image/'),
+  );
+  return image ? '\x16' : null;
 }

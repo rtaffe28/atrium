@@ -1,4 +1,4 @@
-import { cleanup, render, screen, fireEvent, act } from '@testing-library/react';
+import { cleanup, createEvent, render, screen, fireEvent, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from '../App';
 
@@ -60,5 +60,49 @@ describe('terminal key handling', () => {
     expect(handler(press({ key: 'Enter', shiftKey: true }, 'keypress'))).toBe(false);
     expect(handler(press({ key: 'Enter', shiftKey: true }, 'keyup'))).toBe(false);
     expect(sent()).toEqual(['\x1b\r']);
+  });
+});
+
+
+describe('terminal paste handling', () => {
+  beforeEach(() => {
+    g.__xtermKeyHandlers = [];
+    g.__xtermInput = [];
+  });
+  afterEach(cleanup);
+
+  /** What the browser hands a paste handler, reduced to what is read. */
+  const clipboard = (text: string, types: string[]) => ({
+    getData: (type: string) => (type === 'text/plain' ? text : ''),
+    items: types.map((type) => ({ type })),
+  });
+
+  /** Open a session and return the element the terminal it mounted lives in. */
+  function openTerminalHost(): HTMLElement {
+    render(<App />);
+    act(() => {
+      fireEvent.click(screen.getByText('Auth flow migration').closest('.session-row')!);
+    });
+    const hosts = document.querySelectorAll('.terminal-host');
+    expect(hosts.length, 'a host per mounted terminal').toBeGreaterThan(0);
+    return hosts[hosts.length - 1] as HTMLElement;
+  }
+
+  it('sends Ctrl+V for a screenshot, which xterm would otherwise drop', () => {
+    const host = openTerminalHost();
+    const event = createEvent.paste(host, { clipboardData: clipboard('', ['image/png']) });
+    fireEvent(host, event);
+    expect(event.defaultPrevented, "xterm's own paste handling must not run").toBe(true);
+    expect(sent()).toEqual(['\x16']);
+  });
+
+  it('leaves a paste with text to xterm', () => {
+    const host = openTerminalHost();
+    const event = createEvent.paste(host, {
+      clipboardData: clipboard('npm test', ['text/plain', 'image/png']),
+    });
+    fireEvent(host, event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(sent()).toEqual([]);
   });
 });
