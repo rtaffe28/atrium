@@ -2,6 +2,7 @@ import { cleanup, createEvent, render, screen, fireEvent, act } from '@testing-l
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from '../App';
 import { MockHost } from '../host/mock';
+import { MockFiles } from '../host/mock/files';
 import type { Host } from '../host/types';
 
 type Handler = (event: KeyboardEvent) => boolean;
@@ -136,14 +137,12 @@ describe('files dropped on the terminal', () => {
 
   /** A host that, like Electron, knows where a dropped file lives. */
   function hostKnowingPaths(): Host {
-    const base = new MockHost();
-    return {
-      ...base,
-      files: {
-        chooseDirectory: () => base.files.chooseDirectory(),
-        pathOf: (file: File) => `/Users/ryan/Desktop/${file.name}`,
-      },
-    };
+    class FilesKnowingPaths extends MockFiles {
+      override pathOf(file: File): string {
+        return `/Users/ryan/Desktop/${file.name}`;
+      }
+    }
+    return { ...new MockHost(), files: new FilesKnowingPaths() };
   }
 
   /** What the browser hands a drop handler, reduced to what is read. */

@@ -12,7 +12,7 @@
 
 import type { Progress } from './signals';
 
-export type TabKind = 'terminal' | 'browser';
+export type TabKind = 'terminal' | 'browser' | 'file';
 
 export interface Tab {
   id: string;
@@ -54,6 +54,15 @@ export interface Tab {
   cwd?: string;
   /** Browser tabs only. */
   url?: string;
+  /**
+   * File tabs only. Absolute, or under `~`. Absent in a folder tab until a
+   * file is chosen from its tree.
+   */
+  path?: string;
+  /** A folder whose tree is shown beside the file. Absent means no tree. */
+  root?: string;
+  /** A line to land on, from `path:12` or a link. Describes one opening only. */
+  line?: number;
 
   // What the program in the tab has asked the terminal to show. Shown as it
   // was sent and never inferred; none of it outlives the run — see signals.ts.
@@ -66,8 +75,11 @@ export interface Tab {
   programTitle?: string;
 }
 
-/** The tab fields a program set, which describe this run only. */
-export const TRANSIENT_TAB_FIELDS = ['progress', 'attention', 'programTitle'] as const;
+/**
+ * The tab fields that describe this run only: what a program set, and the
+ * line a file tab was asked to land on.
+ */
+export const TRANSIENT_TAB_FIELDS = ['progress', 'attention', 'programTitle', 'line'] as const;
 
 /**
  * Something a tab you are not looking at wants you to know.
@@ -181,6 +193,19 @@ export type DropAction =
 /** Where a dragged session landed: its place on the rail, among the others. */
 export type RailOrder = { kind: 'order'; index: number };
 
+/** What a file tab is opened on: a file, or a folder whose tree is shown. */
+export type FileTarget =
+  | { kind: 'file'; path: string; line?: number }
+  | { kind: 'folder'; root: string };
+
+/**
+ * What a program in a tab asked Atrium to do, through the `atrium` command.
+ *
+ * A closed set, each checked by the host before it gets here: a URL is one,
+ * a path is a file or a folder that exists. Nothing flows back to the program.
+ */
+export type AgentRequest = { verb: 'open'; url: string } | { verb: 'open'; target: FileTarget };
+
 export interface SessionDriver {
   list(): Session[];
   subscribe(handler: (sessions: Session[]) => void): Unsubscribe;
@@ -238,6 +263,16 @@ export interface SessionDriver {
    * when there is exactly one, and splits one off when there is not.
    */
   openLinkBeside(sessionId: string, groupId: string, url: string): void;
+  /**
+   * Open a file or folder in a tab beside the pane holding `groupId`, where
+   * openLinkBeside puts a link. One already open in the session is raised
+   * rather than opened twice.
+   */
+  openFileBeside(sessionId: string, groupId: string, target: FileTarget): void;
+  /** Open a file or folder in the pane holding `groupId` itself. */
+  openFileIn(sessionId: string, groupId: string, target: FileTarget): Tab | null;
+  /** Show another file in a file tab, keeping its tree. */
+  showFile(sessionId: string, tabId: string, path: string, line?: number): void;
 
   /**
    * The tab you are looking at: the active tab of the focused pane, in a

@@ -15,6 +15,8 @@ export type CommandId =
   | 'session.rename'
   | 'tab.newTerminal'
   | 'tab.close'
+  | 'file.open'
+  | 'folder.open'
   | 'settings.open';
 
 export interface Command {
@@ -33,6 +35,8 @@ export const COMMANDS: Command[] = [
   { id: 'session.rename', label: 'Rename session', keys: 'Mod+Shift+R', group: 'Sessions' },
   { id: 'tab.newTerminal', label: 'New terminal tab', keys: 'Mod+T', group: 'Tabs' },
   { id: 'tab.close', label: 'Close tab', keys: 'Mod+W', group: 'Tabs' },
+  { id: 'file.open', label: 'Open file…', keys: 'Mod+O', group: 'Tabs' },
+  { id: 'folder.open', label: 'Open folder…', keys: 'Mod+Shift+O', group: 'Tabs' },
   { id: 'settings.open', label: 'Settings', keys: 'Mod+,', group: 'Application' },
 ];
 

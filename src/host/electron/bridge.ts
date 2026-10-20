@@ -1,4 +1,4 @@
-import type { PersistedWorkspace } from '../types';
+import type { FileContents, FileEntry, FileEvent, FileStat, PersistedWorkspace } from '../types';
 
 /** The shape the preload exposes. Kept here so the renderer has one source. */
 export interface HostInfo {
@@ -52,7 +52,16 @@ export interface AtriumBridge {
   };
   files: {
     choose(): Promise<string | null>;
+    chooseFile(): Promise<string | null>;
     pathOf(file: File): string;
+    stat(path: string): Promise<FileStat | null>;
+    read(path: string, as?: 'text' | 'dataUrl'): Promise<FileContents>;
+    list(dir: string): Promise<FileEntry[]>;
+    /** Start watching `path` under `id`; events arrive on onChanged with it. */
+    watch(id: number, path: string): Promise<void>;
+    unwatch(id: number): void;
+    onChanged(handler: (id: number, event: FileEvent) => void): () => void;
+    openExternally(path: string): Promise<void>;
   };
   notify: {
     post(notice: { title: string; body: string; tag: string }): Promise<void>;

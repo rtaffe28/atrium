@@ -31,9 +31,11 @@ interface Props {
   onOpenSettings: () => void;
   onNewTab: (kind: TabKind) => void;
   canAddTab: boolean;
+  /** Open a file from the native picker, where this host has one. */
+  onOpenFile?: () => void;
 }
 
-export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab }: Props) {
+export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab, onOpenFile }: Props) {
   const host = useHost();
   const platform = host.window.platform();
   const build = host.window.build();
@@ -122,6 +124,25 @@ export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab }: Props
             </g>
           </svg>
         </button>
+        {onOpenFile && host.capabilities.files && (
+          <button
+            className="icon-button subtle"
+            onClick={onOpenFile}
+            disabled={!canAddTab}
+            title="Open file…"
+            aria-label="Open file…"
+          >
+            {/* A page with a folded corner — the mark every file manager and
+                editor uses for "a file". */}
+            <svg viewBox="0 0 16 16" aria-hidden width="14" height="14" fill="none">
+              <g stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 1.75h5.25l3.5 3.5v9H4z" />
+                <path d="M9.25 1.75v3.5h3.5" />
+                <path d="M6.2 8.5h4.6M6.2 11h4.6" />
+              </g>
+            </svg>
+          </button>
+        )}
         <span className="titlebar-divider" />
         <button
           className="icon-button subtle"

@@ -86,6 +86,20 @@ describe('host injection', () => {
     expect(document.querySelector('.build-badge')).toBeNull();
   });
 
+  it('offers to open a file where the host can read one', () => {
+    render(<App host={hostWith({ capabilities: { files: true } })} />);
+    expect(screen.getByLabelText('Open file…')).toBeTruthy();
+  });
+
+  it('degrades instead of breaking when the host cannot read files', () => {
+    render(<App host={hostWith({ capabilities: { files: false } })} />);
+    expect(screen.queryByLabelText('Open file…')).toBeNull();
+
+    const row = screen.getByText('Session rail + status dots').closest('.session-row')!;
+    act(() => fireEvent.click(row));
+    expect(screen.getByText(/cannot read files/i)).toBeTruthy();
+  });
+
   it('reports its own capabilities honestly', () => {
     const host = new MockHost();
     expect(host.capabilities.pty).toBe(false); // scripted output, not processes

@@ -75,6 +75,20 @@ const bridge = {
     // and answered here: the renderer's File has no path of its own since
     // Electron 32, and only the preload may ask webUtils.
     pathOf: (file: File): string => webUtils.getPathForFile(file),
+    chooseFile: (): Promise<string | null> => ipcRenderer.invoke('files:choose-file'),
+    stat: (path: string): Promise<unknown> => ipcRenderer.invoke('files:stat', path),
+    read: (path: string, as?: 'text' | 'dataUrl'): Promise<unknown> =>
+      ipcRenderer.invoke('files:read', path, as),
+    list: (dir: string): Promise<unknown> => ipcRenderer.invoke('files:list', dir),
+    watch: (id: number, path: string): Promise<void> => ipcRenderer.invoke('files:watch', id, path),
+    unwatch: (id: number) => ipcRenderer.send('files:unwatch', id),
+    onChanged: (handler: (id: number, event: unknown) => void) => {
+      const listener = (_e: unknown, id: number, event: unknown) => handler(id, event);
+      ipcRenderer.on('files:changed', listener);
+      return () => ipcRenderer.off('files:changed', listener);
+    },
+    openExternally: (path: string): Promise<void> =>
+      ipcRenderer.invoke('files:open-externally', path),
   },
 
   notify: {

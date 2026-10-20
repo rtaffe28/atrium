@@ -1,6 +1,5 @@
 import type {
   Build,
-  FileDriver,
   PersistedWorkspace,
   WorkspaceDriver,
   Capabilities,
@@ -12,6 +11,7 @@ import type {
   WindowState,
 } from '../types';
 import type { AtriumBridge, HostInfo } from './bridge';
+import { ElectronFiles } from './files';
 import { ElectronSessionDriver, type RestoreInput } from './session';
 import { WebviewSurfaces } from './surfaces';
 
@@ -96,28 +96,6 @@ class FileWorkspace implements WorkspaceDriver {
   }
 }
 
-/** The native folder dialog lives in the main process. */
-class ElectronFiles implements FileDriver {
-  private bridge: AtriumBridge;
-
-  constructor(bridge: AtriumBridge) {
-    this.bridge = bridge;
-  }
-
-  chooseDirectory() {
-    return this.bridge.files.choose();
-  }
-
-  pathOf(file: File): string | null {
-    try {
-      return this.bridge.files.pathOf(file) || null;
-    } catch {
-      // A File that did not come from disk — one a page built — has no path.
-      return null;
-    }
-  }
-}
-
 export class ElectronHost implements Host {
   readonly name = 'electron';
   readonly sessions: ElectronSessionDriver;
@@ -143,6 +121,7 @@ export class ElectronHost implements Host {
       nativeNotifications: true,
       customChrome: true,
       persistence: true,
+      files: true,
     };
   }
 }

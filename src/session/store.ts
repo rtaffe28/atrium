@@ -2,10 +2,12 @@ import { leafGroupIds, removeLeaf, rightNeighbor, setSizesAt, splitLeaf } from '
 import { isWorking, newSignalScan, plain, scanSignals, spins, type SignalScan } from './signals';
 import {
   TRANSIENT_TAB_FIELDS,
+  type AgentRequest,
   type Alert,
   type CreateSessionOptions,
   type DataHandler,
   type DropAction,
+  type FileTarget,
   type LayoutNode,
   type Session,
   type SessionDriver,
@@ -30,6 +32,21 @@ export function titleFromUrl(url: string): string {
     return parsed.pathname.split('/').filter(Boolean).pop() ?? 'file';
   }
   return parsed.protocol.replace(/:$/, '') || 'New tab';
+}
+
+/** A file tab's title: the file's name, or the folder's. */
+export function titleFromPath(path: string): string {
+  return path.replace(/\/+$/, '').split('/').pop() || path;
+}
+
+/** The fields a file tab takes from what it was opened on. */
+function fileTabFields(target: FileTarget): Partial<Tab> {
+  if (target.kind === 'folder') return { root: target.root, title: titleFromPath(target.root) };
+  return {
+    path: target.path,
+    title: titleFromPath(target.path),
+    ...(target.line !== undefined ? { line: target.line } : {}),
+  };
 }
 
 let counter = 0;
@@ -437,7 +454,7 @@ export abstract class SessionStore implements SessionDriver {
     return {
       id: uid('t'),
       kind,
-      title: kind === 'browser' ? 'New tab' : 'zsh',
+      title: kind === 'browser' ? 'New tab' : kind === 'file' ? 'File' : 'zsh',
       // Every terminal gets one, not just tabs we launch an agent in: the
       // command is as likely to be typed by hand, and that tab deserves to
       // come back too.
@@ -773,10 +790,77 @@ export abstract class SessionStore implements SessionDriver {
   openLinkBeside(sessionId: string, groupId: string, url: string): void {
     const session = this.sessions.get(sessionId);
     if (!session?.groups[groupId]) return;
+    this.placeBeside(sessionId, groupId, this.makeTab('browser', { url, title: titleFromUrl(url) }));
+  }
 
-    const tab = this.makeTab('browser', { url, title: titleFromUrl(url) });
-    // Reusing the neighbour keeps a run of Cmd-clicks in one pane of tabs,
-    // rather than halving the screen again with every link.
+  openFileBeside(sessionId: string, groupId: string, target: FileTarget): void {
+    const session = this.sessions.get(sessionId);
+    if (!session?.groups[groupId]) return;
+    const open = this.findFileTab(session, target);
+    if (open) {
+      // Reading the same file in two tabs is never what anyone meant.
+      this.raise(sessionId, open, landing(target));
+      return;
+    }
+    this.placeBeside(sessionId, groupId, this.makeTab('file', fileTabFields(target)));
+  }
+
+  openFileIn(sessionId: string, groupId: string, target: FileTarget): Tab | null {
+    const session = this.sessions.get(sessionId);
+    if (!session?.groups[groupId]) return null;
+    const open = this.findFileTab(session, target);
+    if (open) {
+      this.raise(sessionId, open, landing(target));
+      return this.sessions.get(sessionId)?.tabs[open.id] ?? open;
+    }
+    const tab = this.makeTab('file', fileTabFields(target));
+    this.update(sessionId, (s) => ({
+      ...s,
+      tabs: { ...s.tabs, [tab.id]: tab },
+      groups: {
+        ...s.groups,
+        [groupId]: {
+          ...s.groups[groupId],
+          tabIds: [...s.groups[groupId].tabIds, tab.id],
+          activeTabId: tab.id,
+        },
+      },
+    }));
+    return tab;
+  }
+
+  showFile(sessionId: string, tabId: string, path: string, line?: number): void {
+    const tab = this.sessions.get(sessionId)?.tabs[tabId];
+    if (!tab || tab.kind !== 'file') return;
+    this.patchTab(sessionId, tabId, { path, title: titleFromPath(path), line });
+  }
+
+  /**
+   * Act on what a program in `tabId` asked for through the `atrium` command.
+   *
+   * The host has checked it already: a path exists and is a file or a folder.
+   * What a program can ask for is what a Cmd-click on a link it printed would
+   * do — a tab beside its own — and nothing more.
+   */
+  receiveRequest(tabId: string, request: AgentRequest): void {
+    const session = this.sessionOfTab(tabId);
+    if (!session) return;
+    const groupId = Object.keys(session.groups).find((g) =>
+      session.groups[g].tabIds.includes(tabId),
+    );
+    if (!groupId) return;
+    if ('url' in request) this.openLinkBeside(session.id, groupId, request.url);
+    else this.openFileBeside(session.id, groupId, request.target);
+  }
+
+  /**
+   * Put a new tab in the pane to the right of `groupId`, or in one split off
+   * for it. Reusing the neighbour keeps a run of Cmd-clicks in one pane of
+   * tabs, rather than halving the screen again with every link.
+   */
+  private placeBeside(sessionId: string, groupId: string, tab: Tab): void {
+    const session = this.sessions.get(sessionId);
+    if (!session?.groups[groupId]) return;
     const target = rightNeighbor(session.layout, groupId);
 
     if (target) {
@@ -806,4 +890,35 @@ export abstract class SessionStore implements SessionDriver {
       },
     }));
   }
+
+  /** A tab in the session already on this file, or on this folder with no file. */
+  private findFileTab(session: Session, target: FileTarget): Tab | undefined {
+    return Object.values(session.tabs).find(
+      (tab) =>
+        tab.kind === 'file' &&
+        (target.kind === 'file'
+          ? tab.path === target.path
+          : tab.root === target.root && tab.path === undefined),
+    );
+  }
+
+  /** Bring a tab to the front of its pane, changing `patch` on the way. */
+  private raise(sessionId: string, tab: Tab, patch: Partial<Tab>): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    const groupId = Object.keys(session.groups).find((g) =>
+      session.groups[g].tabIds.includes(tab.id),
+    );
+    if (!groupId) return;
+    this.update(sessionId, (s) => ({
+      ...s,
+      tabs: { ...s.tabs, [tab.id]: { ...s.tabs[tab.id], ...patch } },
+      groups: { ...s.groups, [groupId]: { ...s.groups[groupId], activeTabId: tab.id } },
+    }));
+  }
+}
+
+/** The line a request asks to land on, for a tab that is already open. */
+function landing(target: FileTarget): Partial<Tab> {
+  return target.kind === 'file' && target.line !== undefined ? { line: target.line } : {};
 }

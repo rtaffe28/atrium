@@ -14,6 +14,7 @@ import { PaneTree } from './components/PaneTree';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
+import { useFileChangeMarks } from './fileMarks';
 import { requestFocus, type FocusRequest } from './focusRequest';
 import type { Session, TabKind } from './session/types';
 
@@ -147,6 +148,7 @@ function Workspace() {
   );
 
   useTerminalAlerts(windowFocused, revealTab);
+  useFileChangeMarks(sessions, focusedTabId);
 
   const addTab = useCallback(
     (kind: TabKind) => {
@@ -155,6 +157,26 @@ function Workspace() {
       setFocusRequest(requestFocus(created.id));
     },
     [driver, active, targetGroupId],
+  );
+
+  /**
+   * Open a file or a folder from the native picker, in the pane you last
+   * touched. The tab takes the cursor, so the tree's keys work at once.
+   */
+  const openFileTab = useCallback(
+    async (kind: 'file' | 'folder') => {
+      if (!active || !targetGroupId || !host.capabilities.files) return;
+      const picked =
+        kind === 'file' ? await host.files.chooseFile() : await host.files.chooseDirectory();
+      if (!picked) return;
+      const tab = driver.openFileIn(
+        active.id,
+        targetGroupId,
+        kind === 'file' ? { kind: 'file', path: picked } : { kind: 'folder', root: picked },
+      );
+      if (tab) setFocusRequest(requestFocus(tab.id));
+    },
+    [host, driver, active, targetGroupId],
   );
 
   /**
@@ -287,6 +309,8 @@ function Workspace() {
         if (active) setRenamingId(active.id);
       },
       'tab.newTerminal': () => addTab('terminal'),
+      'file.open': () => void openFileTab('file'),
+      'folder.open': () => void openFileTab('folder'),
       'tab.close': () => {
         const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
         if (active && tabId) driver.closeTab(active.id, tabId);
@@ -302,7 +326,7 @@ function Workspace() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [createSession, addTab, driver, active, targetGroupId]);
+  }, [createSession, addTab, openFileTab, driver, active, targetGroupId]);
 
   return (
     <DragProvider onDrop={handleDrop}>
@@ -312,6 +336,7 @@ function Workspace() {
           onOpenSettings={() => setSettingsOpen(true)}
           onNewTab={addTab}
           canAddTab={Boolean(active && targetGroupId)}
+          onOpenFile={() => void openFileTab('file')}
         />
         <div className="body">
           <Sidebar
