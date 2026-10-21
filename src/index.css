@@ -428,7 +428,7 @@ kbd {
   background: linear-gradient(135deg, #3d4757 0%, #2a323d 100%);
   box-shadow: inset 0 0 0 1px #4b5565;
 }
-.glyph-files {
+.glyph-file {
   background: linear-gradient(135deg, #6b5f3f 0%, #4a4130 100%);
   box-shadow: inset 0 0 0 1px #7d7050;
   border-radius: 2px 3px 3px 3px;
@@ -574,6 +574,236 @@ webview.surface-frame { display: inline-flex; }
   pointer-events: none;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── file tabs ───────────────────────────────────────────────────────── */
+
+.fileview { flex: 1; min-width: 0; min-height: 0; display: flex; }
+.fileview-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+/* The bar a browser tab has, with the path where the address goes. */
+.file-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel);
+}
+/* The folder gives way before the name does: when the bar is narrow it is
+   the name that matters. */
+.file-path {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  margin: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.file-folder { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.file-path strong { flex: 0 0 auto; color: var(--text); font-weight: 500; }
+.icon-button.is-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* Something about the file worth knowing before reading it. */
+.file-notice {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  color: var(--yellow);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* Code: a gutter, and VS Code's colours once the highlighter answers. */
+.code-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 0 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  outline: none;
+}
+.code-view:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.code-line { display: flex; white-space: pre; min-width: max-content; }
+.code-line.is-marked { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.code-gutter {
+  flex: 0 0 auto;
+  width: 3.5em;
+  padding-right: 1.2em;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+}
+.code-text { flex: 0 0 auto; padding-right: 16px; color: var(--text); tab-size: 4; }
+
+/* ── markdown ────────────────────────────────────────────────────────── */
+
+.markdown-view { flex: 1; min-height: 0; overflow: auto; outline: none; }
+.markdown-view:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.markdown {
+  max-width: 780px;
+  padding: 20px 28px 48px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+  word-wrap: break-word;
+}
+.markdown > :first-child { margin-top: 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 {
+  margin: 1.4em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.markdown h1 { font-size: 1.7em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+.markdown h2 { font-size: 1.35em; padding-bottom: 0.25em; border-bottom: 1px solid var(--border-soft); }
+.markdown h3 { font-size: 1.15em; }
+.markdown h4 { font-size: 1em; }
+.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown table, .markdown pre { margin: 0 0 1em; }
+.markdown ul, .markdown ol { padding-left: 1.6em; }
+.markdown li + li { margin-top: 0.2em; }
+.markdown li.task { list-style: none; margin-left: -1.3em; }
+.markdown li.task input { margin: 0 0.5em 0 0; vertical-align: -1px; accent-color: var(--accent); }
+.markdown a { color: var(--accent); text-decoration: none; }
+.markdown a:hover { text-decoration: underline; }
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--panel-raised);
+}
+.markdown pre {
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.markdown pre code { padding: 0; background: transparent; font-size: 12px; }
+.markdown blockquote {
+  padding: 0 1em;
+  border-left: 3px solid var(--border);
+  color: var(--text-dim);
+}
+.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+.markdown table { border-collapse: collapse; font-size: 0.95em; }
+.markdown th, .markdown td { padding: 5px 10px; border: 1px solid var(--border); text-align: left; }
+.markdown th { background: var(--panel-raised); font-weight: 600; }
+.markdown img { max-width: 100%; height: auto; }
+.markdown s { color: var(--text-dim); }
+
+/* ── images ──────────────────────────────────────────────────────────── */
+
+.image-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+  padding: 16px;
+  gap: 10px;
+  cursor: zoom-in;
+}
+.image-view.is-fit { cursor: zoom-out; }
+.image-view img {
+  display: block;
+  /* The checkerboard every image viewer uses, so transparency reads as such. */
+  background:
+    linear-gradient(45deg, #1c2129 25%, transparent 25%, transparent 75%, #1c2129 75%),
+    linear-gradient(45deg, #1c2129 25%, transparent 25%, transparent 75%, #1c2129 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  background-color: var(--panel);
+  border: 1px solid var(--border-soft);
+}
+.image-view.is-fit img { max-width: 100%; max-height: calc(100% - 28px); object-fit: contain; }
+.image-caption { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+
+/* ── the folder tree ─────────────────────────────────────────────────── */
+
+.file-tree {
+  width: 240px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border-soft);
+  background: var(--panel);
+}
+.tree-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+/* The root as a breadcrumb. The end is the part worth seeing when it is
+   too long, so it is laid out from the right. */
+.tree-crumbs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.tree-crumb-slot { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.tree-crumb {
+  border: 0;
+  padding: 2px 3px;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+}
+.tree-crumb:hover { background: var(--panel-high); color: var(--text); }
+.tree-crumb.strong { color: var(--text); font-weight: 500; }
+.tree-rows {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 16px;
+  font-size: 12px;
+  outline: none;
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding-left: calc(8px + var(--depth, 0) * 14px);
+  padding-right: 8px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+.tree-row:hover { background: var(--panel-raised); color: var(--text); }
+.tree-row.is-selected { background: var(--panel-high); color: var(--text); }
+.tree-rows:focus-visible .tree-row.is-cursor { box-shadow: inset 0 0 0 1px var(--accent); }
+.tree-row.is-dir .tree-name { color: var(--text); }
+.tree-chevron { width: 10px; flex: 0 0 auto; text-align: center; font-size: 10px; color: var(--text-faint); }
+.tree-name { overflow: hidden; text-overflow: ellipsis; }
+.tree-note {
+  height: 22px;
+  padding-left: calc(22px + var(--depth, 0) * 14px);
+  line-height: 22px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-faint);
+}
 
 /* ── drag affordances ────────────────────────────────────────────────── */
 

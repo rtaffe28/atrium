@@ -6,6 +6,10 @@ vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     cols = 80;
     rows = 24;
+    buffer = { active: { getLine: () => undefined } };
+    registerLinkProvider() {
+      return { dispose() {} };
+    }
     loadAddon() {}
     open() {}
     focus() {

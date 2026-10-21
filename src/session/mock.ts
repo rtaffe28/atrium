@@ -1,5 +1,6 @@
 import { SessionStore } from './store';
-import type { DataHandler, Unsubscribe } from './types';
+import type { MockFiles } from '../host/mock/files';
+import type { AgentRequest, DataHandler, Unsubscribe } from './types';
 
 const C = {
   reset: '\x1b[0m',
@@ -18,7 +19,17 @@ interface Beat {
   /** The script stops here to ask something; return answers it. */
   asks?: boolean;
   diff?: { files: number; added: number; removed: number };
+  /** The agent wrote a file: what it added to it. */
+  edit?: { path: string; append: string };
+  /** The agent asked Atrium for something, through `atrium`. */
+  request?: AgentRequest;
 }
+
+const NEW_FILE = `/** A rail widget: one row per session. */
+export function Rail() {
+  return null;
+}
+`;
 
 /**
  * What the real agents send their terminal, so the mock exercises the same
@@ -34,7 +45,7 @@ const notify = (body: string) => osc(`777;notify;Claude Code;${body}`);
 const prompt = (cwd: string) => `${C.dim}${cwd}${C.reset} ${C.green}❯${C.reset} `;
 const banner = `${C.magenta}✻${C.reset} ${C.bold}Atrium${C.reset} ${C.dim}· Opus 5${C.reset}\r\n\r\n`;
 
-function agentScript(cwd: string, task: string, files: string[]): Beat[] {
+function agentScript(cwd: string, task: string, files: string[], creates?: string): Beat[] {
   const beats: Beat[] = [
     { after: 300, text: `${prompt(cwd)}claude "${task}"\r\n\r\n` },
     { after: 700, text: `${busy(task)}${banner}` },
@@ -51,8 +62,24 @@ function agentScript(cwd: string, task: string, files: string[]): Beat[] {
       after: 1100 + i * 250,
       text: `  ${C.green}✔${C.reset} Edit ${C.cyan}${file}${C.reset}  ${C.green}+${a}${C.reset} ${C.red}-${r}${C.reset}\r\n`,
       diff: { files: i + 1, added, removed },
+      edit: { path: `${cwd}/${file}`, append: `\n// ${task}: edited by the agent\n` },
     });
   });
+  if (creates) {
+    beats.push(
+      {
+        after: 400,
+        text: `  ${C.green}✔${C.reset} Write ${C.cyan}${creates}${C.reset}  ${C.green}+4${C.reset}\r\n`,
+        edit: { path: `${cwd}/${creates}`, append: NEW_FILE },
+      },
+      // `atrium open`, as an agent runs it once it has written something.
+      {
+        after: 300,
+        text: `  ${C.dim}$ atrium open ${creates}${C.reset}\r\n`,
+        request: { verb: 'open', target: { kind: 'file', path: `${cwd}/${creates}` } },
+      },
+    );
+  }
   beats.push(
     { after: 1200, text: `\r\n  ${C.dim}Running tests…${C.reset}\r\n` },
     { after: 1800, text: `  ${C.green}✔${C.reset} ${C.dim}47 passed, 0 failed${C.reset}\r\n\r\n` },
@@ -133,9 +160,12 @@ export class MockDriver extends SessionStore {
   private streams = new Map<string, Stream>();
   /** Tabs whose script ended on a question, answered by pressing return. */
   private asking = new Set<string>();
+  /** Where the scripted agent's edits land, if the host gave it anywhere. */
+  private files: MockFiles | null;
 
-  constructor() {
+  constructor(files: MockFiles | null = null) {
     super();
+    this.files = files;
     this.seed();
   }
 
@@ -165,11 +195,19 @@ export class MockDriver extends SessionStore {
       this.sessions.set(session.id, { ...session, named: true });
     }
 
+    // A file open beside the agent editing it, with the repository's tree:
+    // what a viewer is for. The script rewrites the file as it goes.
+    const [s1Group] = Object.keys(s1.groups);
+    this.openFileBeside(s1.id, s1Group, { kind: 'file', path: `${cwd}/src/components/Sidebar.tsx` });
+    for (const tab of Object.values(this.sessions.get(s1.id)!.tabs)) {
+      if (tab.kind === 'file') this.patchTab(s1.id, tab.id, { root: cwd });
+    }
+
     this.play(s1.id, a1.id, agentScript(cwd, 'build the session rail', [
       'src/components/Sidebar.tsx',
       'src/index.css',
       'src/App.tsx',
-    ]));
+    ], 'src/components/Rail.tsx'));
     this.play(s1.id, a2.id, devServerScript(cwd));
     this.play(s2.id, b1.id, waitingScript(cwd));
     this.play(s3.id, c1.id, buildErrorScript(cwd));
@@ -203,6 +241,8 @@ export class MockDriver extends SessionStore {
       stream.timers.push(
         window.setTimeout(() => {
           this.emit(tabId, beat.text);
+          if (beat.edit) this.files?.append(beat.edit.path, beat.edit.append);
+          if (beat.request) this.receiveRequest(tabId, beat.request);
           if (beat.asks) this.asking.add(tabId);
           if (beat.diff) {
             this.update(sessionId, (session) => ({ ...session, diff: beat.diff ?? session.diff }));

@@ -46,6 +46,8 @@ export interface Capabilities {
   customChrome: boolean;
   /** Restoring the workspace across restarts. */
   persistence: boolean;
+  /** Reading files and folders on this machine, and watching them change. */
+  files: boolean;
 }
 
 // ── surfaces ───────────────────────────────────────────────────────────────
@@ -89,17 +91,55 @@ export interface SurfaceDriver {
   subscribe(id: string, handler: (event: SurfaceEvent) => void): Unsubscribe;
 }
 
-// ── choosing a folder ──────────────────────────────────────────────────────
+// ── files ──────────────────────────────────────────────────────────────────
+
+export interface FileStat {
+  kind: 'file' | 'directory' | 'other';
+  size: number;
+  /** Last modified, as a timestamp. */
+  mtime: number;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  directory: boolean;
+}
+
+export type FileContents =
+  /** `truncated` when the file was longer than the host would read. */
+  | { kind: 'text'; text: string; size: number; truncated: boolean }
+  /** A NUL byte in the first block: not something to show as text. */
+  | { kind: 'binary'; size: number }
+  /** The whole file, for an image. */
+  | { kind: 'dataUrl'; dataUrl: string; size: number };
+
+export type FileEvent = { type: 'changed' } | { type: 'deleted' };
 
 /**
- * Asking the user for a directory, natively.
+ * Files and folders: read and watched, never written.
  *
- * Resolves to null if they cancel. Typing a path into a text field is the
- * worse half of this — it is the only way to reach a folder you cannot spell
- * from memory.
+ * Writing has no method on purpose. The viewer is not an editor — see
+ * docs/plan/active/15-file-viewer.md — and the terminal beside it already
+ * holds one, and an agent that edits on request.
  */
 export interface FileDriver {
+  /**
+   * Ask the user for a directory, natively.
+   *
+   * Resolves to null if they cancel. Typing a path into a text field is the
+   * worse half of this — it is the only way to reach a folder you cannot
+   * spell from memory.
+   */
   chooseDirectory(): Promise<string | null>;
+  /** Ask the user for a file, natively. Null if they cancel. */
+  chooseFile(): Promise<string | null>;
+  /**
+   * Ask for a file or a folder in one dialog, where the platform has one.
+   * macOS does; Windows and Linux can only offer one kind, and get a file.
+   * What came back says which it is: stat it.
+   */
+  chooseAny(): Promise<string | null>;
   /**
    * Where a file the OS dropped into the window lives on disk.
    *
@@ -107,6 +147,24 @@ export interface FileDriver {
    * nothing else — and the drop then has nothing to type.
    */
   pathOf(file: File): string | null;
+  /** What is at `path`, or null for nothing. */
+  stat(path: string): Promise<FileStat | null>;
+  /** The file's text, or the whole file as a data URL for an image. */
+  read(path: string, as?: 'text' | 'dataUrl'): Promise<FileContents>;
+  /**
+   * A directory's entries: folders first, then files, both alphabetical, and
+   * without the entries nobody opens a tree to see (`.git`, `node_modules`).
+   */
+  list(dir: string): Promise<FileEntry[]>;
+  /**
+   * Tell `handler` when `path` changes: for a file, that it was rewritten or
+   * deleted; for a directory, that its listing did. Debounced by the host,
+   * and watching the directory rather than the inode, since editors and
+   * agents write-then-rename and an inode watch goes stale on the first save.
+   */
+  watch(path: string, handler: (event: FileEvent) => void): Unsubscribe;
+  /** Open the file with whatever the OS would open it with. */
+  openExternally(path: string): Promise<void>;
 }
 
 // ── notifications ──────────────────────────────────────────────────────────

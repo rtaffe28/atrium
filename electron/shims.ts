@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import ATRIUM from './shell/atrium.sh';
 import BASHRC from './shell/bashrc.sh';
 import CLAUDE_SHIM from './shell/claude.sh';
 import HOOK from './shell/hook.sh';
@@ -97,6 +98,8 @@ export function shimDirectory(): string | null {
       ['claude', CLAUDE_SHIM],
       ['codex', CODEX_SHIM],
       ['hook', HOOK],
+      // The command a program in a tab talks to Atrium with; see requests.ts.
+      ['atrium', ATRIUM],
     ] as const) {
       const shim = join(dir, name);
       writeFileSync(shim, body, 'utf8');

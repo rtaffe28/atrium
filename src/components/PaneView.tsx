@@ -3,8 +3,9 @@ import { useEffect, useId, useRef } from 'react';
 import { useDrag } from '../dnd/context';
 import { APPEND, resolvePaneZone } from '../dnd/zones';
 import { titleFromUrl } from '../session/store';
-import type { Session, SessionDriver, TabKind } from '../session/types';
+import type { FileTarget, Session, SessionDriver, TabKind } from '../session/types';
 import { BrowserView } from './BrowserView';
+import { FileView } from './FileView';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
 
@@ -54,6 +55,15 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
   if (!group) return null;
 
   const openLink = (url: string) => driver.openLinkBeside(session.id, groupId, url);
+  // A path, with the same click and the same split as a link. It remembers
+  // where it was opened from, which is where its tree goes if asked for.
+  const paneCwd = (group.activeTabId && session.tabs[group.activeTabId]?.cwd) || session.cwd;
+  const openFile = (target: FileTarget) =>
+    driver.openFileBeside(
+      session.id,
+      groupId,
+      target.kind === 'file' && !target.cwd ? { ...target, cwd: paneCwd } : target,
+    );
 
   const activeTab = group.activeTabId ? session.tabs[group.activeTabId] : null;
   const splitPreview =
@@ -79,6 +89,8 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
             driver={driver}
             focusRequest={focusRequest}
             onOpenLink={openLink}
+            onOpenFile={openFile}
+            cwd={activeTab.cwd ?? session.cwd}
           />
         )}
         {activeTab?.kind === 'browser' && (
@@ -101,6 +113,19 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
             }
             onTitle={(title) => driver.patchTab(session.id, activeTab.id, { title })}
             focusRequest={focusRequest}
+            onOpenLink={openLink}
+          />
+        )}
+        {activeTab?.kind === 'file' && (
+          <FileView
+            // One frame per tab: the tree's expansion and the text's scroll
+            // belong to the tab, not to the pane it is in.
+            key={activeTab.id}
+            tab={activeTab}
+            session={session}
+            driver={driver}
+            focusRequest={focusRequest}
+            onOpenBeside={openFile}
             onOpenLink={openLink}
           />
         )}

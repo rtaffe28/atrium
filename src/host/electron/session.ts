@@ -84,6 +84,8 @@ export class ElectronSessionDriver extends SessionStore {
     this.stateRoot = sessionState;
     this.bridge.pty.onData((tabId, data) => this.receive(tabId, data));
     this.bridge.pty.onExit((tabId) => this.programEnded(tabId));
+    // What a program asked for through `atrium`, checked by main already.
+    this.bridge.agent.onRequest((tabId, request) => this.receiveRequest(tabId, request));
 
     if (restore && restore.sessions.length > 0) {
       this.hydrate(restore.sessions, restore.scrollback);

@@ -3,14 +3,18 @@ import { readFile, writeFile, rename, readdir, stat, mkdir, rm } from 'node:fs/p
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
+import { FileWatchers, expandHome, listDirectory, readContents, statPath } from './files';
 import { menuTemplate } from './menu';
 import { PtyManager } from './pty';
+import { RequestWatcher } from './requests';
 import { useBaseDirectory } from './shims';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 
 let ptys: PtyManager;
+let watchers: FileWatchers;
+let requests: RequestWatcher;
 let loginShellName = 'zsh';
 
 // A development run and the installed app are the same app by name, and macOS
@@ -88,6 +92,8 @@ function createWindow() {
     console.log('[renderer]', event.message),
   );
   ptys.bind(window.webContents);
+  watchers.bind(window.webContents);
+  requests.bind(window.webContents);
 
   const emitState = () =>
     window.webContents.send('window:state', {
@@ -125,11 +131,17 @@ app.whenReady().then(async () => {
   const env = await resolveLoginEnv();
   loginShellName = (env.SHELL ?? '/bin/zsh').split('/').pop() ?? 'zsh';
   ptys = new PtyManager(env, () => {});
+  watchers = new FileWatchers(() => {});
+  const homeDir = env.HOME ?? env.USERPROFILE ?? '';
 
   const insets = chromeInsets();
 
   /** Where the shims report what each tab is running; the renderer is told. */
   const sessionRoot = path.join(app.getPath('userData'), 'sessions');
+
+  // And where the programs in tabs ask for things, through `atrium`.
+  requests = new RequestWatcher(sessionRoot, homeDir, () => {});
+  requests.start().catch((error) => console.error('[atrium] could not watch requests:', error));
 
   ipcMain.handle('host:info', () => ({
     platform:
@@ -258,6 +270,41 @@ app.whenReady().then(async () => {
       message: 'Choose a folder to browse',
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle('files:choose-file', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      message: 'Choose a file to show',
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  // macOS has one dialog for both; Windows and Linux would show a folder
+  // picker for the pair, so there it is the file picker and Open folder… is
+  // the other way in.
+  ipcMain.handle('files:choose-any', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: process.platform === 'darwin' ? ['openFile', 'openDirectory'] : ['openFile'],
+      message: 'Choose a file or folder to show',
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  // Reading and watching, never writing: the viewer is not an editor. Paths
+  // arrive as the shell wrote them, so `~` is expanded here, where the home
+  // directory is known.
+  ipcMain.handle('files:stat', (_e, p: string) => statPath(expandHome(p, homeDir)));
+  ipcMain.handle('files:read', (_e, p: string, as?: 'text' | 'dataUrl') =>
+    readContents(expandHome(p, homeDir), as),
+  );
+  ipcMain.handle('files:list', (_e, p: string) => listDirectory(expandHome(p, homeDir)));
+  ipcMain.handle('files:watch', (_e, id: number, p: string) =>
+    watchers.watch(id, expandHome(p, homeDir)),
+  );
+  ipcMain.on('files:unwatch', (_e, id: number) => watchers.unwatch(id));
+  ipcMain.handle('files:open-externally', async (_e, p: string) => {
+    await shell.openPath(expandHome(p, homeDir));
   });
 
   /**

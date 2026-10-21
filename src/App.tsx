@@ -14,8 +14,9 @@ import { PaneTree } from './components/PaneTree';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
+import { useFileChangeMarks } from './fileMarks';
 import { requestFocus, type FocusRequest } from './focusRequest';
-import type { Session, TabKind } from './session/types';
+import type { FileTarget, Session, TabKind } from './session/types';
 
 /** How long the workspace must be still before it is saved. */
 const SAVE_DEBOUNCE_MS = 700;
@@ -147,6 +148,7 @@ function Workspace() {
   );
 
   useTerminalAlerts(windowFocused, revealTab);
+  useFileChangeMarks(sessions, focusedTabId);
 
   const addTab = useCallback(
     (kind: TabKind) => {
@@ -155,6 +157,29 @@ function Workspace() {
       setFocusRequest(requestFocus(created.id));
     },
     [driver, active, targetGroupId],
+  );
+
+  /**
+   * Open a file or a folder from the native picker, in the pane you last
+   * touched. One dialog takes either where the platform allows; what came
+   * back says which. The tab takes the cursor, so the tree's keys work at
+   * once.
+   */
+  const openFileTab = useCallback(
+    async (kind: 'any' | 'folder') => {
+      if (!active || !targetGroupId || !host.capabilities.files) return;
+      const picked =
+        kind === 'folder' ? await host.files.chooseDirectory() : await host.files.chooseAny();
+      if (!picked) return;
+      const info = kind === 'folder' ? null : await host.files.stat(picked);
+      const target: FileTarget =
+        kind === 'folder' || info?.kind === 'directory'
+          ? { kind: 'folder', root: picked }
+          : { kind: 'file', path: picked };
+      const tab = driver.openFileIn(active.id, targetGroupId, target);
+      if (tab) setFocusRequest(requestFocus(tab.id));
+    },
+    [host, driver, active, targetGroupId],
   );
 
   /**
@@ -287,6 +312,8 @@ function Workspace() {
         if (active) setRenamingId(active.id);
       },
       'tab.newTerminal': () => addTab('terminal'),
+      'file.open': () => void openFileTab('any'),
+      'folder.open': () => void openFileTab('folder'),
       'tab.close': () => {
         const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
         if (active && tabId) driver.closeTab(active.id, tabId);
@@ -302,7 +329,7 @@ function Workspace() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [createSession, addTab, driver, active, targetGroupId]);
+  }, [createSession, addTab, openFileTab, driver, active, targetGroupId]);
 
   return (
     <DragProvider onDrop={handleDrop}>
@@ -312,6 +339,7 @@ function Workspace() {
           onOpenSettings={() => setSettingsOpen(true)}
           onNewTab={addTab}
           canAddTab={Boolean(active && targetGroupId)}
+          onOpenFile={() => void openFileTab('any')}
         />
         <div className="body">
           <Sidebar

@@ -10,7 +10,8 @@ import { encodeDrop, encodeKey, encodePaste } from '../keyboard/terminal';
 import { isResizing, onSettled } from '../layout/settle';
 import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
-import type { SessionDriver } from '../session/types';
+import type { FileTarget, SessionDriver } from '../session/types';
+import { fileUrlPath, pathLinkProvider } from '../terminal/pathLinks';
 
 const THEME = {
   background: '#0d0f12',
@@ -48,6 +49,10 @@ interface Props {
   focusRequest?: FocusRequest | null;
   /** A link was Cmd- or Ctrl-clicked. */
   onOpenLink?: (url: string) => void;
+  /** A path was Cmd- or Ctrl-clicked, or a file: link. */
+  onOpenFile?: (target: FileTarget) => void;
+  /** Where the shell is, which a path it printed is relative to. */
+  cwd?: string;
 }
 
 /**
@@ -57,18 +62,23 @@ interface Props {
  * split, a tab move, or a session switch exercises exactly the path a real
  * driver uses to recover from a dropped connection.
  */
-export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props) {
+export function TerminalView({ tabId, driver, focusRequest, onOpenLink, onOpenFile, cwd }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const { settings } = useSettings();
   const fontSize = settings.terminalFontSize;
-  const { window: hostWindow, files } = useHost();
+  const { window: hostWindow, files, capabilities } = useHost();
   const platform = hostWindow.platform();
-  // Read through a ref so a new callback each render does not tear down the
-  // terminal it is wired into.
+  const canReadFiles = capabilities.files;
+  // Read through refs so a new callback each render, or a cd, does not tear
+  // down the terminal it is wired into.
   const openLinkRef = useRef(onOpenLink);
+  const openFileRef = useRef(onOpenFile);
+  const cwdRef = useRef(cwd);
   useEffect(() => {
     openLinkRef.current = onOpenLink;
+    openFileRef.current = onOpenFile;
+    cwdRef.current = cwd;
   });
 
   useEffect(() => {
@@ -85,17 +95,23 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
       scrollback: 10_000,
       theme: THEME,
       // OSC 8 hyperlinks — what agents print when a link's text is not its
-      // URL. Same rule as a bare URL below.
+      // URL. Same rule as a bare URL below; a file: link opens the file.
       linkHandler: {
         activate: (event, url) => follow(event, url),
-        allowNonHttpProtocols: false,
+        allowNonHttpProtocols: true,
       },
     });
 
     // A plain click belongs to the terminal: selecting, and positioning the
     // cursor in apps that take the mouse. Only the modifier makes it a link.
     function follow(event: MouseEvent, url: string) {
-      if (isOpenLinkClick(event, platform)) openLinkRef.current?.(url);
+      if (!isOpenLinkClick(event, platform)) return;
+      if (/^file:/i.test(url)) {
+        const path = fileUrlPath(url);
+        if (path) openFileRef.current?.({ kind: 'file', path });
+      } else if (/^https?:/i.test(url)) {
+        openLinkRef.current?.(url);
+      }
     }
 
     termRef.current = term;
@@ -103,6 +119,23 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon(follow));
+    // Paths, with the same click and the same split as links; see
+    // terminal/pathLinks.ts. Only where the host can say whether a path
+    // exists, since every word with a dot in it is a candidate.
+    const pathLinks = canReadFiles
+      ? term.registerLinkProvider(
+          pathLinkProvider(term, {
+            cwd: () => cwdRef.current ?? '~',
+            stat: (path) => files.stat(path),
+            activate: (event, path, line, directory) => {
+              if (!isOpenLinkClick(event, platform)) return;
+              openFileRef.current?.(
+                directory ? { kind: 'folder', root: path } : { kind: 'file', path, line },
+              );
+            },
+          }),
+        )
+      : null;
     term.open(host);
 
     // WebGL is the fast path but fails on some Linux GPU drivers and in VMs.
@@ -209,10 +242,11 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink }: Props)
       host.removeEventListener('drop', dropped);
       typed.dispose();
       detach();
+      pathLinks?.dispose();
       term.dispose();
       termRef.current = null;
     };
-  }, [tabId, driver, fontSize, platform, files]);
+  }, [tabId, driver, fontSize, platform, files, canReadFiles]);
 
   useEffect(() => {
     if (claimFocus(focusRequest ?? null, tabId)) termRef.current?.focus();

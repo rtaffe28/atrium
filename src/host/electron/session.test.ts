@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FINISH_QUIET_MS, FINISH_SETTLE_MS } from '../../session/store';
+import type { AgentRequest } from '../../session/types';
 import { ElectronSessionDriver } from './session';
 import type { AtriumBridge } from './bridge';
 
@@ -11,6 +12,7 @@ function fakeBridge() {
   const written: Array<{ id: string; data: string }> = [];
   let onData: ((id: string, data: string) => void) | null = null;
   let onExit: ((id: string, code: number) => void) | null = null;
+  let onRequest: ((id: string, request: AgentRequest) => void) | null = null;
 
   const bridge = {
     info: vi.fn(),
@@ -38,6 +40,10 @@ function fakeBridge() {
       prepareSession: vi.fn(async () => '/tmp/state'),
       report: vi.fn(async () => report),
       newestCodexSession: vi.fn(async () => null),
+      onRequest: (handler: (id: string, request: AgentRequest) => void) => {
+        onRequest = handler;
+        return () => {};
+      },
     },
     notify: { post: vi.fn() },
     workspace: { load: vi.fn(), save: vi.fn() },
@@ -50,6 +56,8 @@ function fakeBridge() {
     written,
     emit: (id: string, data: string) => onData?.(id, data),
     exit: (id: string) => onExit?.(id, 0),
+    /** What main forwards from a tab's `atrium` command, already checked. */
+    request: (id: string, request: AgentRequest) => onRequest?.(id, request),
     setForeground: (f: Record<string, string>) => {
       foreground = f;
     },
@@ -69,6 +77,29 @@ const STATE = '/Users/ryan/Library/Application Support/atrium/sessions';
 
 const ESC = '\x1b';
 const osc = (body: string) => `${ESC}]${body}\x07`;
+
+describe('what a program asks for through atrium', () => {
+  it('opens what main forwarded beside the pane the program is in', () => {
+    const f = fakeBridge();
+    const driver = new ElectronSessionDriver(f.bridge, '/Users/ryan', '/bin/zsh', STATE);
+    const { session, tabId } = firstTerminalTab(driver);
+
+    f.request(tabId, { verb: 'open', url: 'http://localhost:5173/' });
+    f.request(tabId, { verb: 'open', target: { kind: 'file', path: '/Users/ryan/git/atrium/PLAN.md', line: 3 } });
+    f.request('t-nobody', { verb: 'open', url: 'http://localhost:5173/' });
+
+    const after = driver.list().find((s) => s.id === session.id)!;
+    expect(after.layout.type).toBe('split');
+    const opened = Object.values(after.tabs).filter((t) => t.id !== tabId);
+    expect(opened.map((t) => [t.kind, t.title])).toEqual([
+      ['browser', 'localhost:5173'],
+      ['file', 'PLAN.md'],
+    ]);
+    expect(opened[1]).toMatchObject({ path: '/Users/ryan/git/atrium/PLAN.md', line: 3 });
+    expect(driver.list()).toHaveLength(1);
+    driver.dispose();
+  });
+});
 
 describe('what a tab is running, as reported by the shell', () => {
   /**
