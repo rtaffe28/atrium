@@ -80,8 +80,12 @@ function describe(p: string, file: boolean, directory: boolean, line: number | u
  * does. A sweep on start picks up anything written while the app was not
  * looking.
  */
+/** How often to look even when nothing was heard; see start(). */
+const SWEEP_MS = 3000;
+
 export class RequestWatcher {
   private watcher: FSWatcher | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
   /** Requests being acted on. A second look at one waits for the first. */
   private handling = new Map<string, Promise<void>>();
 
@@ -99,28 +103,36 @@ export class RequestWatcher {
 
   async start(): Promise<void> {
     await mkdir(this.root, { recursive: true });
-    this.watcher = watch(this.root, { recursive: true, persistent: false }, (_type, filename) => {
-      if (filename) this.changed(String(filename));
-    });
+    this.watcher = watch(this.root, { recursive: true, persistent: false }, (_type, filename) =>
+      this.changed(filename === null ? null : String(filename)),
+    );
     this.watcher.on('error', () => {});
     await this.sweep();
+    // FSEvents has been seen to coalesce a burst of writes into one event
+    // naming a directory above them, and to drop the rest. Listing on every
+    // event covers the first; looking every few seconds regardless covers
+    // the second, so a request can be late but not lost. The directories are
+    // few and tiny, so this costs nothing worth measuring.
+    this.timer = setInterval(() => void this.sweep(), SWEEP_MS);
+    this.timer.unref?.();
   }
 
   close(): void {
     this.watcher?.close();
     this.watcher = null;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
   }
 
   /**
-   * Anything under `<tab>/requests` means: look at that directory. The event
-   * may name the file, or — when FSEvents coalesces a burst of them — only
-   * the directory, so the directory is listed either way and whatever is
-   * there is handled; dot names are still being written.
+   * An event names a file, its `requests` directory, or — coalesced —
+   * something above that; whatever it names, what is listed is what is
+   * handled. Dot names are still being written and are skipped by the sweep.
    */
-  private changed(relative: string): void {
-    const parts = relative.split(path.sep);
-    if (parts.length < 2 || parts[1] !== 'requests') return;
-    void this.sweepTab(parts[0]);
+  private changed(relative: string | null): void {
+    const parts = relative?.split(path.sep) ?? [];
+    if (parts.length >= 2 && parts[1] === 'requests') void this.sweepTab(parts[0]);
+    else void this.sweep();
   }
 
   private async sweep(): Promise<void> {
