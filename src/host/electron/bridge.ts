@@ -1,3 +1,4 @@
+import type { AgentRequest } from '../../session/types';
 import type { FileContents, FileEntry, FileEvent, FileStat, PersistedWorkspace } from '../types';
 
 /** The shape the preload exposes. Kept here so the renderer has one source. */
@@ -49,6 +50,8 @@ export interface AtriumBridge {
     ): Promise<string>;
     report(tabId: string): Promise<{ sessionId: string | null }>;
     newestCodexSession(since: number): Promise<string | null>;
+    /** A program in a tab asked for something through the `atrium` command. */
+    onRequest(handler: (tabId: string, request: AgentRequest) => void): () => void;
   };
   files: {
     choose(): Promise<string | null>;

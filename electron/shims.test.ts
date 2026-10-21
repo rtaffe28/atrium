@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -157,6 +157,61 @@ describe('the codex shim', () => {
   it('stays out of the way of a subcommand', () => {
     armResume('thread-7', 'resume-codex');
     expect(run('codex', ['exec'])).toBe('codex exec');
+  });
+});
+
+describe('the atrium command', () => {
+  /** Run it as a program in a tab would, from `cwd`, and return what it wrote. */
+  function atrium(args: string[], cwd: string, withState = true): { out: string; requests: string[] } {
+    const out = execFileSync('/bin/bash', [join(shims, 'atrium'), ...args], {
+      encoding: 'utf8',
+      cwd,
+      env: { PATH: '/usr/bin:/bin', HOME: state, ...(withState ? { ATRIUM_SESSION_STATE: state } : {}) },
+    });
+    const dir = join(state, 'requests');
+    const requests = existsSync(dir)
+      ? readdirSync(dir)
+          .filter((name) => !name.startsWith('.'))
+          .sort()
+          .map((name) => readFileSync(join(dir, name), 'utf8'))
+      : [];
+    return { out, requests };
+  }
+
+  it('writes an open request, with a relative path made absolute where it ran', () => {
+    const { requests } = atrium(['open', 'docs/plan.md'], state);
+    expect(requests).toHaveLength(1);
+    const [verb, path] = requests[0].split('\n');
+    expect(verb).toBe('open');
+    expect(path).toMatch(/^\/.*\/docs\/plan\.md$/);
+  });
+
+  it('passes a URL, an absolute path and a ~ path through as given', () => {
+    atrium(['open', 'http://localhost:5173/'], state);
+    atrium(['open', '/etc/hosts:12'], state);
+    atrium(['open', '~/notes.md'], state);
+    expect(atrium(['--help'], state).requests.map((r) => r.split('\n')[1])).toEqual([
+      'http://localhost:5173/',
+      '/etc/hosts:12',
+      '~/notes.md',
+    ]);
+  });
+
+  it('writes a report as a key and a value on their own lines', () => {
+    expect(atrium(['report', 'summary', 'migrating auth'], state).requests).toEqual([
+      'report\nsummary\nmigrating auth\n',
+    ]);
+  });
+
+  /** Nothing to talk to is an error an agent can read, not a silent no-op. */
+  it('refuses outside an Atrium tab, and explains itself', () => {
+    expect(() => atrium(['open', 'x'], state, false)).toThrow(/not inside an Atrium tab/);
+    expect(() => atrium(['open'], state)).toThrow(/takes one path/);
+    expect(() => atrium(['dance'], state)).toThrow(/unknown command/);
+    const help = atrium(['--help'], state).out;
+    expect(help).toContain('atrium open');
+    expect(help).toContain('atrium report');
+    expect(existsSync(join(state, 'requests'))).toBe(false);
   });
 });
 

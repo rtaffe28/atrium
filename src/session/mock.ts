@@ -1,6 +1,6 @@
 import { SessionStore } from './store';
 import type { MockFiles } from '../host/mock/files';
-import type { DataHandler, Unsubscribe } from './types';
+import type { AgentRequest, DataHandler, Unsubscribe } from './types';
 
 const C = {
   reset: '\x1b[0m',
@@ -21,6 +21,8 @@ interface Beat {
   diff?: { files: number; added: number; removed: number };
   /** The agent wrote a file: what it added to it. */
   edit?: { path: string; append: string };
+  /** The agent asked Atrium for something, through `atrium`. */
+  request?: AgentRequest;
 }
 
 const NEW_FILE = `/** A rail widget: one row per session. */
@@ -64,11 +66,19 @@ function agentScript(cwd: string, task: string, files: string[], creates?: strin
     });
   });
   if (creates) {
-    beats.push({
-      after: 400,
-      text: `  ${C.green}✔${C.reset} Write ${C.cyan}${creates}${C.reset}  ${C.green}+4${C.reset}\r\n`,
-      edit: { path: `${cwd}/${creates}`, append: NEW_FILE },
-    });
+    beats.push(
+      {
+        after: 400,
+        text: `  ${C.green}✔${C.reset} Write ${C.cyan}${creates}${C.reset}  ${C.green}+4${C.reset}\r\n`,
+        edit: { path: `${cwd}/${creates}`, append: NEW_FILE },
+      },
+      // `atrium open`, as an agent runs it once it has written something.
+      {
+        after: 300,
+        text: `  ${C.dim}$ atrium open ${creates}${C.reset}\r\n`,
+        request: { verb: 'open', target: { kind: 'file', path: `${cwd}/${creates}` } },
+      },
+    );
   }
   beats.push(
     { after: 1200, text: `\r\n  ${C.dim}Running tests…${C.reset}\r\n` },
@@ -232,6 +242,7 @@ export class MockDriver extends SessionStore {
         window.setTimeout(() => {
           this.emit(tabId, beat.text);
           if (beat.edit) this.files?.append(beat.edit.path, beat.edit.append);
+          if (beat.request) this.receiveRequest(tabId, beat.request);
           if (beat.asks) this.asking.add(tabId);
           if (beat.diff) {
             this.update(sessionId, (session) => ({ ...session, diff: beat.diff ?? session.diff }));

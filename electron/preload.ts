@@ -67,6 +67,12 @@ const bridge = {
       ipcRenderer.invoke('agent:report', tabId),
     newestCodexSession: (since: number): Promise<string | null> =>
       ipcRenderer.invoke('agent:newest-codex-session', since),
+    /** A program in a tab asked for something through `atrium`; see requests.ts. */
+    onRequest: (handler: (tabId: string, request: unknown) => void) => {
+      const listener = (_e: unknown, tabId: string, request: unknown) => handler(tabId, request);
+      ipcRenderer.on('agent:request', listener);
+      return () => ipcRenderer.off('agent:request', listener);
+    },
   },
 
   files: {

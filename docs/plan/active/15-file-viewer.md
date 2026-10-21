@@ -1,7 +1,10 @@
 # A file viewer: widgets in the pane slot, and the channel an agent opens them through
 
-**Status: planned, nothing built.** A tab can be a terminal or a browser. This
-plan adds a third kind: a file, or a folder with its tree beside whichever of
+**Status: the tab, the tree, the viewers and the channel are built; the
+sandbox is ahead.** Stages 15.1 and 15.2 landed as planned. The viewers of
+15.3 were built in-tree first, ahead of `14`'s runner, because a markdown file
+shown as its source was not a viewer; see *Where this stands* below. A tab
+can be a terminal or a browser. This plan adds a third kind: a file, or a folder with its tree beside whichever of
 its files you are reading. What renders the file is a widget in the sense
 `14-composable-rail.md` defines: code that renders in the rail's sandbox, reads
 only what the frame hands it, and can be replaced per file type by one an agent
@@ -296,6 +299,16 @@ need, so **the built-ins run in the sandbox**, prebuilt by Vite from
 | `atrium:binary` | what the read says is binary | size, type, open externally |
 | `atrium:text` | the floor | a plain `<pre>`, live. **In-tree, not a widget**: it is what shows when the runner cannot build or load a viewer, and the thing that cannot fail must not depend on the thing that can |
 
+**Where this stands (October 2026).** The built-ins exist and are in-tree:
+`src/viewers/kind.ts` says what a file is, `CodeView`, `MarkdownView` and
+`ImageView` show it, and the highlighter already runs as the service
+described below, in a worker the app owns. They were built this way first
+because the floor was not enough to use, and the runner did not exist to put
+them in. Moving them into the sandbox when it does is a move, not a rewrite:
+the registry is the seam, the SDK's `<Code>` and `<Markdown>` are these
+components with the host swapped for the protocol, and nothing they need is in
+the app tree. Until then *Fork this viewer* and `matches` wait with them.
+
 Running the built-ins in the sandbox is the honesty check `14` wanted for the
 sessions projection: if the SDK cannot express the built-in markdown viewer, it
 cannot express the one an agent will write either. It is also what makes
@@ -498,11 +511,11 @@ list of pull requests does.
 
 | Order | Plan | Stage |
 |---|---|---|
-| 1 | 15.1 | **The file tab, the tree and the seam.** `'file'` in `TabKind`, `path` and `root` on the tab, `FileDriver` and `files`, `electron/files.ts` and the mock tree, `openFileBeside`, paths in terminals that Cmd-click into a split exactly as links do, `Mod+O`, `Mod+Shift+O` and the glyph, the folder tree — lazy, live, breadcrumb, keyboard, reveal — persistence, and `atrium:text` in-tree with live update. Tests: open, restore, degrade |
-| 2 | 15.2 | **The channel.** `electron/shell/atrium.sh` with `open` and `report` and a `--help` written for an agent; the requests directory, the watcher in main, `agent:request`, `receiveRequest`; `open` on a file, a folder or a URL. The dogfood moment: "open the plan you just wrote" |
+| 1 | 15.1 ✅ | **The file tab, the tree and the seam.** `'file'` in `TabKind`, `path` and `root` on the tab, `FileDriver` and `files`, `electron/files.ts` and the mock tree, `openFileBeside`, paths in terminals that Cmd-click into a split exactly as links do, `Mod+O`, `Mod+Shift+O` and the glyph, the folder tree — lazy, live, breadcrumb, keyboard, reveal — persistence, and `atrium:text` in-tree with live update. Tests: open, restore, degrade |
+| 2 | 15.2 ✅ | **The channel.** `electron/shell/atrium.sh` with `open` and `report` and a `--help` written for an agent; the requests directory, the watcher in main, `agent:request`, `receiveRequest`; `open` on a file, a folder or a URL. The dogfood moment: "open the plan you just wrote" |
 | 3 | 14.1 | The frame |
 | 4 | 14.2 | The runner and the SDK |
-| 5 | 15.3 | **Colour.** The pane slot in the runner: `useFile`, focus, key forwarding. The highlighter worker and `useHighlight`. `<Code>` and `<Markdown>` in the kit. `atrium:code`, `atrium:markdown`, `atrium:image`, `atrium:binary` prebuilt. Language detection and the size policy |
+| 5 | 15.3 ◐ | **Colour.** *Built in-tree ahead of the runner: the worker, language detection, the size policy, and the code, markdown, image and binary viewers.* Still to do with 14.2: the pane slot in the runner — `useFile`, focus, key forwarding — and `useHighlight`, `<Code>` and `<Markdown>` in the kit, with the built-ins moved into the sandbox |
 | 6 | 14.3–14.5 | Widgets from disk, the spec file, permissions |
 | 7 | 15.4 | **Viewers from disk.** `slot` and `matches` in the manifest, precedence, `viewers.json`, *Open with…*, the `files` grant and its scope check, *Fork this viewer* |
 | 8 | 14.6 + 15.5 | **The agent loop, and the rail half.** `atrium:files`, `useSessionFiles`, the `GitDriver` restored and the tree's git marks, `touched` by command and by hook, the viewer section of `AGENTS.md` |

@@ -6,6 +6,7 @@ import { resolveLoginEnv } from './env';
 import { FileWatchers, expandHome, listDirectory, readContents, statPath } from './files';
 import { menuTemplate } from './menu';
 import { PtyManager } from './pty';
+import { RequestWatcher } from './requests';
 import { useBaseDirectory } from './shims';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,6 +14,7 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 
 let ptys: PtyManager;
 let watchers: FileWatchers;
+let requests: RequestWatcher;
 let loginShellName = 'zsh';
 
 // A development run and the installed app are the same app by name, and macOS
@@ -91,6 +93,7 @@ function createWindow() {
   );
   ptys.bind(window.webContents);
   watchers.bind(window.webContents);
+  requests.bind(window.webContents);
 
   const emitState = () =>
     window.webContents.send('window:state', {
@@ -135,6 +138,10 @@ app.whenReady().then(async () => {
 
   /** Where the shims report what each tab is running; the renderer is told. */
   const sessionRoot = path.join(app.getPath('userData'), 'sessions');
+
+  // And where the programs in tabs ask for things, through `atrium`.
+  requests = new RequestWatcher(sessionRoot, homeDir, () => {});
+  requests.start().catch((error) => console.error('[atrium] could not watch requests:', error));
 
   ipcMain.handle('host:info', () => ({
     platform:
