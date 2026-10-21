@@ -88,12 +88,12 @@ describe('host injection', () => {
 
   it('offers to open a file where the host can read one', () => {
     render(<App host={hostWith({ capabilities: { files: true } })} />);
-    expect(screen.getByLabelText('Open file…')).toBeTruthy();
+    expect(screen.getByLabelText('Open…')).toBeTruthy();
   });
 
   it('degrades instead of breaking when the host cannot read files', () => {
     render(<App host={hostWith({ capabilities: { files: false } })} />);
-    expect(screen.queryByLabelText('Open file…')).toBeNull();
+    expect(screen.queryByLabelText('Open…')).toBeNull();
 
     const row = screen.getByText('Session rail + status dots').closest('.session-row')!;
     act(() => fireEvent.click(row));

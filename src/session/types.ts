@@ -195,7 +195,13 @@ export type RailOrder = { kind: 'order'; index: number };
 
 /** What a file tab is opened on: a file, or a folder whose tree is shown. */
 export type FileTarget =
-  | { kind: 'file'; path: string; line?: number }
+  | {
+      kind: 'file';
+      path: string;
+      line?: number;
+      /** Where it was opened from, which is where its tree is rooted if asked for. */
+      cwd?: string;
+    }
   | { kind: 'folder'; root: string };
 
 /**

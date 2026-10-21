@@ -168,6 +168,10 @@ export class MockFiles implements FileDriver {
     return null;
   }
 
+  async chooseAny(): Promise<string | null> {
+    return null;
+  }
+
   /** A browser is handed a dropped file's bytes, never its path. */
   pathOf(_file: File): string | null {
     return null;

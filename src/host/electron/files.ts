@@ -25,6 +25,10 @@ export class ElectronFiles implements FileDriver {
     return this.bridge.files.chooseFile();
   }
 
+  chooseAny(): Promise<string | null> {
+    return this.bridge.files.chooseAny();
+  }
+
   pathOf(file: File): string | null {
     try {
       return this.bridge.files.pathOf(file) || null;

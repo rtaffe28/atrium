@@ -76,6 +76,7 @@ const bridge = {
     // Electron 32, and only the preload may ask webUtils.
     pathOf: (file: File): string => webUtils.getPathForFile(file),
     chooseFile: (): Promise<string | null> => ipcRenderer.invoke('files:choose-file'),
+    chooseAny: (): Promise<string | null> => ipcRenderer.invoke('files:choose-any'),
     stat: (path: string): Promise<unknown> => ipcRenderer.invoke('files:stat', path),
     read: (path: string, as?: 'text' | 'dataUrl'): Promise<unknown> =>
       ipcRenderer.invoke('files:read', path, as),

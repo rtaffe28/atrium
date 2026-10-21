@@ -31,7 +31,7 @@ interface Props {
   onOpenSettings: () => void;
   onNewTab: (kind: TabKind) => void;
   canAddTab: boolean;
-  /** Open a file from the native picker, where this host has one. */
+  /** Open a file or folder from the native picker, where this host has one. */
   onOpenFile?: () => void;
 }
 
@@ -129,8 +129,8 @@ export function TitleBar({ session, onOpenSettings, onNewTab, canAddTab, onOpenF
             className="icon-button subtle"
             onClick={onOpenFile}
             disabled={!canAddTab}
-            title="Open file…"
-            aria-label="Open file…"
+            title={`Open a file or folder… (${platform === 'mac' ? '⌘' : 'Ctrl+'}O)`}
+            aria-label="Open…"
           >
             {/* A page with a folded corner — the mark every file manager and
                 editor uses for "a file". */}

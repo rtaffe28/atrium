@@ -16,7 +16,7 @@ import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { useFileChangeMarks } from './fileMarks';
 import { requestFocus, type FocusRequest } from './focusRequest';
-import type { Session, TabKind } from './session/types';
+import type { FileTarget, Session, TabKind } from './session/types';
 
 /** How long the workspace must be still before it is saved. */
 const SAVE_DEBOUNCE_MS = 700;
@@ -161,19 +161,22 @@ function Workspace() {
 
   /**
    * Open a file or a folder from the native picker, in the pane you last
-   * touched. The tab takes the cursor, so the tree's keys work at once.
+   * touched. One dialog takes either where the platform allows; what came
+   * back says which. The tab takes the cursor, so the tree's keys work at
+   * once.
    */
   const openFileTab = useCallback(
-    async (kind: 'file' | 'folder') => {
+    async (kind: 'any' | 'folder') => {
       if (!active || !targetGroupId || !host.capabilities.files) return;
       const picked =
-        kind === 'file' ? await host.files.chooseFile() : await host.files.chooseDirectory();
+        kind === 'folder' ? await host.files.chooseDirectory() : await host.files.chooseAny();
       if (!picked) return;
-      const tab = driver.openFileIn(
-        active.id,
-        targetGroupId,
-        kind === 'file' ? { kind: 'file', path: picked } : { kind: 'folder', root: picked },
-      );
+      const info = kind === 'folder' ? null : await host.files.stat(picked);
+      const target: FileTarget =
+        kind === 'folder' || info?.kind === 'directory'
+          ? { kind: 'folder', root: picked }
+          : { kind: 'file', path: picked };
+      const tab = driver.openFileIn(active.id, targetGroupId, target);
       if (tab) setFocusRequest(requestFocus(tab.id));
     },
     [host, driver, active, targetGroupId],
@@ -309,7 +312,7 @@ function Workspace() {
         if (active) setRenamingId(active.id);
       },
       'tab.newTerminal': () => addTab('terminal'),
-      'file.open': () => void openFileTab('file'),
+      'file.open': () => void openFileTab('any'),
       'folder.open': () => void openFileTab('folder'),
       'tab.close': () => {
         const tabId = active && targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
@@ -336,7 +339,7 @@ function Workspace() {
           onOpenSettings={() => setSettingsOpen(true)}
           onNewTab={addTab}
           canAddTab={Boolean(active && targetGroupId)}
-          onOpenFile={() => void openFileTab('file')}
+          onOpenFile={() => void openFileTab('any')}
         />
         <div className="body">
           <Sidebar

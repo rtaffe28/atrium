@@ -30,6 +30,10 @@ export default defineConfig({
   // nothing in the console to say why.
   base: './',
   plugins: [shellText(), react()],
+  // The highlighter runs in a worker and loads grammars on demand. An iife
+  // worker would have every grammar inlined into one bundle; a module worker
+  // keeps them as chunks.
+  worker: { format: 'es' },
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],

@@ -53,6 +53,7 @@ export interface AtriumBridge {
   files: {
     choose(): Promise<string | null>;
     chooseFile(): Promise<string | null>;
+    chooseAny(): Promise<string | null>;
     pathOf(file: File): string;
     stat(path: string): Promise<FileStat | null>;
     read(path: string, as?: 'text' | 'dataUrl'): Promise<FileContents>;

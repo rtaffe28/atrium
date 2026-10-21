@@ -103,6 +103,35 @@ describe('a file tab', () => {
     expect(await screen.findByText('plan')).toBeTruthy();
   });
 
+  it('renders markdown, with its source a toggle away', async () => {
+    render(<App host={new MockHost()} />);
+    openRailSession();
+    const readme = await treeRow('/README.md');
+    act(() => {
+      fireEvent.click(readme);
+    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'atrium' })).toBeTruthy();
+    expect(screen.queryByText('# atrium')).toBeNull();
+
+    act(() => {
+      fireEvent.click(screen.getByLabelText('Source'));
+    });
+    expect(await screen.findByText('# atrium')).toBeTruthy();
+  });
+
+  it('shows a folder’s README first, when it has one', async () => {
+    const host = new MockHost();
+    render(<App host={host} />);
+    openRailSession();
+    const session = host.sessions.list().find((s) => s.title === 'Session rail + status dots')!;
+    const groupId = Object.keys(session.groups)[0];
+    act(() => {
+      host.sessions.openFileIn(session.id, groupId, { kind: 'folder', root: `${SAMPLE_ROOT}/docs/plan` });
+    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Plans' })).toBeTruthy();
+    expect(tabTitles()).toContain('README.md');
+  });
+
   it('says so for a file that is not there', async () => {
     const host = new MockHost();
     render(<App host={host} />);

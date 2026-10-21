@@ -135,6 +135,12 @@ export interface FileDriver {
   /** Ask the user for a file, natively. Null if they cancel. */
   chooseFile(): Promise<string | null>;
   /**
+   * Ask for a file or a folder in one dialog, where the platform has one.
+   * macOS does; Windows and Linux can only offer one kind, and get a file.
+   * What came back says which it is: stat it.
+   */
+  chooseAny(): Promise<string | null>;
+  /**
    * Where a file the OS dropped into the window lives on disk.
    *
    * Null where the host cannot know — a browser tab is handed the bytes and

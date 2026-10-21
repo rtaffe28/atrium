@@ -46,6 +46,7 @@ function fileTabFields(target: FileTarget): Partial<Tab> {
     path: target.path,
     title: titleFromPath(target.path),
     ...(target.line !== undefined ? { line: target.line } : {}),
+    ...(target.cwd ? { cwd: target.cwd } : {}),
   };
 }
 

@@ -273,6 +273,17 @@ app.whenReady().then(async () => {
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
+  // macOS has one dialog for both; Windows and Linux would show a folder
+  // picker for the pair, so there it is the file picker and Open folder… is
+  // the other way in.
+  ipcMain.handle('files:choose-any', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: process.platform === 'darwin' ? ['openFile', 'openDirectory'] : ['openFile'],
+      message: 'Choose a file or folder to show',
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
   // Reading and watching, never writing: the viewer is not an editor. Paths
   // arrive as the shell wrote them, so `~` is expanded here, where the home
   // directory is known.
