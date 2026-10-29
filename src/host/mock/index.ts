@@ -8,7 +8,8 @@ import type {
   WindowDriver,
   WindowState,
 } from '../types';
-import { MockFiles } from './files';
+import { MockFiles, SAMPLE_ROOT } from './files';
+import { MockGit } from './git';
 import { WebNotify } from './notify';
 import { IframeSurfaces } from './surfaces';
 import { LocalStorageWorkspace } from './workspace';
@@ -60,6 +61,7 @@ export class MockHost implements Host {
   readonly name = 'mock';
   // The files first: the scripted agent writes into them.
   readonly files = new MockFiles();
+  readonly git = new MockGit(this.files, SAMPLE_ROOT);
   readonly sessions = new MockDriver(this.files);
   readonly surfaces = new IframeSurfaces();
   readonly notify = new WebNotify();
@@ -73,5 +75,6 @@ export class MockHost implements Host {
     customChrome: false,
     persistence: true,
     files: true,
+    git: true,
   };
 }

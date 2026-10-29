@@ -20,7 +20,10 @@ export type FileTarget =
   | { kind: 'file'; path: string; line?: number }
   | { kind: 'folder'; root: string };
 
-export type AgentRequest = { verb: 'open'; url: string } | { verb: 'open'; target: FileTarget };
+export type AgentRequest =
+  | { verb: 'open'; url: string }
+  | { verb: 'open'; target: FileTarget }
+  | { verb: 'diff'; root: string; path?: string };
 
 export interface ParsedRequest {
   verb: string;
@@ -70,6 +73,23 @@ function describe(p: string, file: boolean, directory: boolean, line: number | u
     };
   }
   return { refused: `not a file or folder: ${asked}` };
+}
+
+/**
+ * A `diff` argument: a folder is the repository to show, a file is the file
+ * to show it on. Whether it is in a repository is the tab's to say.
+ */
+export async function classifyDiff(arg: string, home: string): Promise<Outcome> {
+  const trimmed = arg.trim();
+  if (!trimmed) return { refused: 'nothing to diff' };
+  const p = expandHome(trimmed, home);
+  const info = await stat(p).catch(() => null);
+  if (info?.isDirectory()) return { request: { verb: 'diff', root: p } };
+  if (info?.isFile()) return { request: { verb: 'diff', root: path.dirname(p), path: p } };
+  // A file the agent deleted is a change worth showing, and its folder says where.
+  const parent = await stat(path.dirname(p)).catch(() => null);
+  if (parent?.isDirectory()) return { request: { verb: 'diff', root: path.dirname(p), path: p } };
+  return { refused: `no such file or folder: ${trimmed}` };
 }
 
 /**
@@ -165,6 +185,12 @@ export class RequestWatcher {
       const outcome = await classifyOpen(args.join('\n'), this.home);
       if ('request' in outcome) this.send(tabId, outcome.request);
       else await this.log(dir, `open refused: ${outcome.refused}`);
+      return;
+    }
+    if (verb === 'diff') {
+      const outcome = await classifyDiff(args.join('\n'), this.home);
+      if ('request' in outcome) this.send(tabId, outcome.request);
+      else await this.log(dir, `diff refused: ${outcome.refused}`);
       return;
     }
     if (verb === 'report') {

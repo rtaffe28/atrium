@@ -18,7 +18,6 @@ interface Beat {
   text: string;
   /** The script stops here to ask something; return answers it. */
   asks?: boolean;
-  diff?: { files: number; added: number; removed: number };
   /** The agent wrote a file: what it added to it. */
   edit?: { path: string; append: string };
   /** The agent asked Atrium for something, through `atrium`. */
@@ -51,17 +50,12 @@ function agentScript(cwd: string, task: string, files: string[], creates?: strin
     { after: 700, text: `${busy(task)}${banner}` },
     { after: 900, text: `  ${C.dim}Reading the surrounding code…${C.reset}\r\n` },
   ];
-  let added = 0;
-  let removed = 0;
   files.forEach((file, i) => {
     const a = 12 + i * 19;
     const r = 3 + i * 4;
-    added += a;
-    removed += r;
     beats.push({
       after: 1100 + i * 250,
       text: `  ${C.green}✔${C.reset} Edit ${C.cyan}${file}${C.reset}  ${C.green}+${a}${C.reset} ${C.red}-${r}${C.reset}\r\n`,
-      diff: { files: i + 1, added, removed },
       edit: { path: `${cwd}/${file}`, append: `\n// ${task}: edited by the agent\n` },
     });
   });
@@ -97,6 +91,15 @@ function agentScript(cwd: string, task: string, files: string[], creates?: strin
 }
 
 const AUTH = 'migrate the auth flow';
+
+/** What the auth agent writes once it is told which way to go. */
+const AUTH_SESSION = `import { createSession } from './create';
+
+/** Every cookie goes through createSession(), the admin path included. */
+export function startSession(user: { id: string; admin: boolean }) {
+  return createSession(user.id, { scope: user.admin ? 'admin' : 'user' });
+}
+`;
 
 function waitingScript(cwd: string): Beat[] {
   return [
@@ -203,15 +206,15 @@ export class MockDriver extends SessionStore {
       if (tab.kind === 'file') this.patchTab(s1.id, tab.id, { root: cwd });
     }
 
-    this.play(s1.id, a1.id, agentScript(cwd, 'build the session rail', [
+    this.play(a1.id, agentScript(cwd, 'build the session rail', [
       'src/components/Sidebar.tsx',
       'src/index.css',
       'src/App.tsx',
     ], 'src/components/Rail.tsx'));
-    this.play(s1.id, a2.id, devServerScript(cwd));
-    this.play(s2.id, b1.id, waitingScript(cwd));
-    this.play(s3.id, c1.id, buildErrorScript(cwd));
-    this.play(s4.id, d1.id, agentScript(cwd, 'try the WebGL addon', [
+    this.play(a2.id, devServerScript(cwd));
+    this.play(b1.id, waitingScript(cwd));
+    this.play(c1.id, buildErrorScript(cwd));
+    this.play(d1.id, agentScript(cwd, 'try the WebGL addon', [
       'src/components/TerminalView.tsx',
       'package.json',
     ]));
@@ -233,7 +236,7 @@ export class MockDriver extends SessionStore {
     this.receiveSignals(tabId, text);
   }
 
-  private play(sessionId: string, tabId: string, script: Beat[]) {
+  private play(tabId: string, script: Beat[]) {
     const stream = this.stream(tabId);
     let elapsed = 0;
     for (const beat of script) {
@@ -244,9 +247,6 @@ export class MockDriver extends SessionStore {
           if (beat.edit) this.files?.append(beat.edit.path, beat.edit.append);
           if (beat.request) this.receiveRequest(tabId, beat.request);
           if (beat.asks) this.asking.add(tabId);
-          if (beat.diff) {
-            this.update(sessionId, (session) => ({ ...session, diff: beat.diff ?? session.diff }));
-          }
         }, elapsed),
       );
     }
@@ -254,14 +254,13 @@ export class MockDriver extends SessionStore {
 
   protected openTerminal(tabId: string, cwd: string, agent?: string): void {
     if (agent) {
-      const session = this.sessionOfTab(tabId);
-      this.play(session?.id ?? '', tabId, agentScript(cwd, 'wire up the pty driver', [
+      this.play(tabId, agentScript(cwd, 'wire up the pty driver', [
         'src/session/pty.ts',
         'electron/main.ts',
       ]));
       return;
     }
-    this.play('', tabId, [{ after: 150, text: prompt(cwd) }]);
+    this.play(tabId, [{ after: 150, text: prompt(cwd) }]);
   }
 
   protected primeScrollback(tabId: string, history: string): void {
@@ -299,7 +298,7 @@ export class MockDriver extends SessionStore {
 
     if (data === '\r' && this.asking.has(tabId)) {
       this.asking.delete(tabId);
-      this.play(session.id, tabId, [
+      this.play(tabId, [
         {
           after: 500,
           text: `${busy(AUTH)}\r\n  ${C.dim}Understood — routing both call sites.${C.reset}\r\n`,
@@ -307,7 +306,7 @@ export class MockDriver extends SessionStore {
         {
           after: 1400,
           text: `  ${C.green}✔${C.reset} Edit ${C.cyan}src/auth/session.ts${C.reset}  ${C.green}+34${C.reset} ${C.red}-12${C.reset}\r\n\r\n`,
-          diff: { files: 1, added: 34, removed: 12 },
+          edit: { path: `${session.cwd}/src/auth/session.ts`, append: AUTH_SESSION },
         },
         {
           after: 200,

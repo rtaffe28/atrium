@@ -1,4 +1,5 @@
 import { leafGroupIds, removeLeaf, rightNeighbor, setSizesAt, splitLeaf } from '../layout/tree';
+import { isUnder } from '../paths';
 import { isWorking, newSignalScan, plain, scanSignals, spins, type SignalScan } from './signals';
 import {
   TRANSIENT_TAB_FIELDS,
@@ -6,6 +7,7 @@ import {
   type Alert,
   type CreateSessionOptions,
   type DataHandler,
+  type DiffStat,
   type DropAction,
   type FileTarget,
   type LayoutNode,
@@ -40,6 +42,14 @@ export function titleFromPath(path: string): string {
 }
 
 /** The fields a file tab takes from what it was opened on. */
+/** What a tab is called before it has anything better to be called. */
+const TITLES: Record<TabKind, string> = {
+  terminal: 'zsh',
+  browser: 'New tab',
+  file: 'File',
+  diff: 'Changes',
+};
+
 function fileTabFields(target: FileTarget): Partial<Tab> {
   if (target.kind === 'folder') return { root: target.root, title: titleFromPath(target.root) };
   return {
@@ -455,7 +465,7 @@ export abstract class SessionStore implements SessionDriver {
     return {
       id: uid('t'),
       kind,
-      title: kind === 'browser' ? 'New tab' : kind === 'file' ? 'File' : 'zsh',
+      title: TITLES[kind],
       // Every terminal gets one, not just tabs we launch an agent in: the
       // command is as likely to be typed by hand, and that tab deserves to
       // come back too.
@@ -815,19 +825,40 @@ export abstract class SessionStore implements SessionDriver {
       return this.sessions.get(sessionId)?.tabs[open.id] ?? open;
     }
     const tab = this.makeTab('file', fileTabFields(target));
-    this.update(sessionId, (s) => ({
-      ...s,
-      tabs: { ...s.tabs, [tab.id]: tab },
-      groups: {
-        ...s.groups,
-        [groupId]: {
-          ...s.groups[groupId],
-          tabIds: [...s.groups[groupId].tabIds, tab.id],
-          activeTabId: tab.id,
-        },
-      },
-    }));
+    this.placeIn(sessionId, groupId, tab);
     return tab;
+  }
+
+  openChangesBeside(sessionId: string, groupId: string, root: string, path?: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session?.groups[groupId]) return;
+    const open = this.findChangesTab(session, root);
+    if (open) {
+      this.raise(sessionId, open, path ? { path } : {});
+      return;
+    }
+    this.placeBeside(sessionId, groupId, this.makeTab('diff', { root, ...(path ? { path } : {}) }));
+  }
+
+  openChangesIn(sessionId: string, groupId: string, root: string, path?: string): Tab | null {
+    const session = this.sessions.get(sessionId);
+    if (!session?.groups[groupId]) return null;
+    const open = this.findChangesTab(session, root);
+    if (open) {
+      this.raise(sessionId, open, path ? { path } : {});
+      return this.sessions.get(sessionId)?.tabs[open.id] ?? open;
+    }
+    const tab = this.makeTab('diff', { root, ...(path ? { path } : {}) });
+    this.placeIn(sessionId, groupId, tab);
+    return tab;
+  }
+
+  setDiffStat(sessionId: string, diff: DiffStat): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    const was = session.diff;
+    if (was.files === diff.files && was.added === diff.added && was.removed === diff.removed) return;
+    this.update(sessionId, (s) => ({ ...s, diff }));
   }
 
   showFile(sessionId: string, tabId: string, path: string, line?: number): void {
@@ -850,7 +881,8 @@ export abstract class SessionStore implements SessionDriver {
       session.groups[g].tabIds.includes(tabId),
     );
     if (!groupId) return;
-    if ('url' in request) this.openLinkBeside(session.id, groupId, request.url);
+    if (request.verb === 'diff') this.openChangesBeside(session.id, groupId, request.root, request.path);
+    else if ('url' in request) this.openLinkBeside(session.id, groupId, request.url);
     else this.openFileBeside(session.id, groupId, request.target);
   }
 
@@ -890,6 +922,34 @@ export abstract class SessionStore implements SessionDriver {
         [newGroupId]: { id: newGroupId, tabIds: [tab.id], activeTabId: tab.id },
       },
     }));
+  }
+
+  /** Add a tab to the end of the pane holding `groupId`, in front. */
+  private placeIn(sessionId: string, groupId: string, tab: Tab): void {
+    this.update(sessionId, (s) => ({
+      ...s,
+      tabs: { ...s.tabs, [tab.id]: tab },
+      groups: {
+        ...s.groups,
+        [groupId]: {
+          ...s.groups[groupId],
+          tabIds: [...s.groups[groupId].tabIds, tab.id],
+          activeTabId: tab.id,
+        },
+      },
+    }));
+  }
+
+  /**
+   * The changes tab already showing `root`'s repository, if the session has
+   * one. The store cannot ask git which repository a folder is in, so a tab on
+   * a folder above or below `root` counts: a session's agent works in one
+   * repository, and its subfolders are that repository too.
+   */
+  private findChangesTab(session: Session, root: string): Tab | undefined {
+    return Object.values(session.tabs).find(
+      (tab) => tab.kind === 'diff' && tab.root !== undefined && (isUnder(tab.root, root) || isUnder(root, tab.root)),
+    );
   }
 
   /** A tab in the session already on this file, or on this folder with no file. */

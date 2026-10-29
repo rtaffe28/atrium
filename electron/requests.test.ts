@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { classifyOpen, parseRequest, RequestWatcher, type AgentRequest } from './requests';
+import { classifyDiff, classifyOpen, parseRequest, RequestWatcher, type AgentRequest } from './requests';
 
 let dir: string;
 beforeEach(() => {
@@ -56,6 +56,29 @@ describe('classifyOpen', () => {
       refused: expect.stringContaining('no such file'),
     });
     expect(await classifyOpen('   ', '/home')).toMatchObject({ refused: 'nothing to open' });
+  });
+});
+
+describe('classifyDiff', () => {
+  it('shows a folder\'s repository, or a file within it', async () => {
+    writeFileSync(join(dir, 'a.ts'), '');
+    expect(await classifyDiff(dir, '/home')).toEqual({ request: { verb: 'diff', root: dir } });
+    expect(await classifyDiff(join(dir, 'a.ts'), '/home')).toEqual({
+      request: { verb: 'diff', root: dir, path: join(dir, 'a.ts') },
+    });
+  });
+
+  it('shows a deleted file, by the folder it was in', async () => {
+    expect(await classifyDiff(join(dir, 'gone.ts'), '/home')).toEqual({
+      request: { verb: 'diff', root: dir, path: join(dir, 'gone.ts') },
+    });
+  });
+
+  it('refuses a folder that is not there', async () => {
+    expect(await classifyDiff(join(dir, 'no', 'such.ts'), '/home')).toMatchObject({
+      refused: expect.stringContaining('no such file'),
+    });
+    expect(await classifyDiff(' ', '/home')).toMatchObject({ refused: 'nothing to diff' });
   });
 });
 

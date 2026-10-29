@@ -5,6 +5,7 @@ import { APPEND, resolvePaneZone } from '../dnd/zones';
 import { titleFromUrl } from '../session/store';
 import type { FileTarget, Session, SessionDriver, TabKind } from '../session/types';
 import { BrowserView } from './BrowserView';
+import { DiffView } from './DiffView';
 import { FileView } from './FileView';
 import { TabBar } from './TabBar';
 import { TerminalView } from './TerminalView';
@@ -127,6 +128,16 @@ export function PaneView({ session, groupId, driver, onFocus, focusRequest }: Pr
             focusRequest={focusRequest}
             onOpenBeside={openFile}
             onOpenLink={openLink}
+          />
+        )}
+        {activeTab?.kind === 'diff' && (
+          <DiffView
+            key={activeTab.id}
+            tab={activeTab}
+            session={session}
+            driver={driver}
+            focusRequest={focusRequest}
+            onOpenBeside={openFile}
           />
         )}
         {!activeTab && <div className="empty">Empty pane</div>}
