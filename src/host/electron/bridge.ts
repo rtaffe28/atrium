@@ -1,5 +1,12 @@
 import type { AgentRequest } from '../../session/types';
-import type { FileContents, FileEntry, FileEvent, FileStat, PersistedWorkspace } from '../types';
+import type {
+  FileContents,
+  FileEntry,
+  FileEvent,
+  FileStat,
+  GitStatus,
+  PersistedWorkspace,
+} from '../types';
 
 /** The shape the preload exposes. Kept here so the renderer has one source. */
 export interface HostInfo {
@@ -66,6 +73,10 @@ export interface AtriumBridge {
     unwatch(id: number): void;
     onChanged(handler: (id: number, event: FileEvent) => void): () => void;
     openExternally(path: string): Promise<void>;
+  };
+  git: {
+    status(dir: string): Promise<GitStatus | null>;
+    original(root: string, path: string): Promise<FileContents | null>;
   };
   notify: {
     post(notice: { title: string; body: string; tag: string }): Promise<void>;

@@ -12,7 +12,7 @@
 
 import type { Progress } from './signals';
 
-export type TabKind = 'terminal' | 'browser' | 'file';
+export type TabKind = 'terminal' | 'browser' | 'file' | 'diff';
 
 export interface Tab {
   id: string;
@@ -55,11 +55,15 @@ export interface Tab {
   /** Browser tabs only. */
   url?: string;
   /**
-   * File tabs only. Absolute, or under `~`. Absent in a folder tab until a
-   * file is chosen from its tree.
+   * File tabs: absolute, or under `~`; absent in a folder tab until a file is
+   * chosen from its tree. Changes tabs: the changed file being read, absent
+   * until one is chosen.
    */
   path?: string;
-  /** A folder whose tree is shown beside the file. Absent means no tree. */
+  /**
+   * File tabs: a folder whose tree is shown beside the file; absent means no
+   * tree. Changes tabs: a directory in the repository whose changes are shown.
+   */
   root?: string;
   /** A line to land on, from `path:12` or a link. Describes one opening only. */
   line?: number;
@@ -210,7 +214,11 @@ export type FileTarget =
  * A closed set, each checked by the host before it gets here: a URL is one,
  * a path is a file or a folder that exists. Nothing flows back to the program.
  */
-export type AgentRequest = { verb: 'open'; url: string } | { verb: 'open'; target: FileTarget };
+export type AgentRequest =
+  | { verb: 'open'; url: string }
+  | { verb: 'open'; target: FileTarget }
+  /** The changes in the repository holding `root`, with `path` chosen if given. */
+  | { verb: 'diff'; root: string; path?: string };
 
 export interface SessionDriver {
   list(): Session[];
@@ -279,6 +287,16 @@ export interface SessionDriver {
   openFileIn(sessionId: string, groupId: string, target: FileTarget): Tab | null;
   /** Show another file in a file tab, keeping its tree. */
   showFile(sessionId: string, tabId: string, path: string, line?: number): void;
+  /**
+   * Open the changes in the repository holding `root` in a tab beside the
+   * pane holding `groupId`, with `path` chosen if given. A changes tab already
+   * open on `root` is raised instead, and moved to `path`.
+   */
+  openChangesBeside(sessionId: string, groupId: string, root: string, path?: string): void;
+  /** The same, in the pane holding `groupId` itself. */
+  openChangesIn(sessionId: string, groupId: string, root: string, path?: string): Tab | null;
+  /** What git says changed in the session's directory, for the rail. */
+  setDiffStat(sessionId: string, diff: DiffStat): void;
 
   /**
    * The tab you are looking at: the active tab of the focused pane, in a

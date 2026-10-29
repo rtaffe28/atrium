@@ -519,7 +519,7 @@ list of pull requests does.
 | 6 | 14.3–14.5 | Widgets from disk, the spec file, permissions |
 | 7 | 15.4 | **Viewers from disk.** `slot` and `matches` in the manifest, precedence, `viewers.json`, *Open with…*, the `files` grant and its scope check, *Fork this viewer* |
 | 8 | 14.6 + 15.5 | **The agent loop, and the rail half.** `atrium:files`, `useSessionFiles`, the `GitDriver` restored and the tree's git marks, `touched` by command and by hook, the viewer section of `AGENTS.md` |
-| 9 | later | `atrium:diff` against HEAD, which replaces the roadmap's "diff review pane"; `Mod+P` with the palette; a tree row dragged to a pane edge to open it there, or onto a terminal to type its path; a file or folder dropped in from the OS; mermaid and maths in `<Markdown>`; remote images once `14` has `net`; find across frames |
+| 9 | later | ~~`atrium:diff` against HEAD~~ — *built in-tree ahead of the runner, as the viewers were: a `'diff'` tab of the repository's changed files beside a unified diff, coloured by the same worker, with `GitDriver` (`status`, `original`) on the host and `git: boolean` in the capabilities; opened from the rail's +/−, `Mod+Shift+G`, and `atrium diff [path]`. The rail's +/− is now git's, polled. It replaces the roadmap's "diff review pane"*; `Mod+P` with the palette; a tree row dragged to a pane edge to open it there, or onto a terminal to type its path; a file or folder dropped in from the OS; mermaid and maths in `<Markdown>`; remote images once `14` has `net`; find across frames |
 
 ## Open questions
 

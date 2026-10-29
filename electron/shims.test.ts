@@ -197,6 +197,19 @@ describe('the atrium command', () => {
     ]);
   });
 
+  it('writes a diff request for where it ran, or for the path it is given', () => {
+    const { requests } = atrium(['diff'], state);
+    atrium(['diff', 'src/a.ts'], state);
+    const all = atrium(['diff', '~/repo'], state).requests;
+    expect(requests).toHaveLength(1);
+    expect(all.map((r) => r.split('\n').slice(0, 2))).toEqual([
+      ['diff', expect.stringMatching(/^\/.+/)],
+      ['diff', expect.stringMatching(/^\/.*\/src\/a\.ts$/)],
+      ['diff', '~/repo'],
+    ]);
+    expect(() => atrium(['diff', 'a', 'b'], state)).toThrow(/at most one path/);
+  });
+
   it('writes a report as a key and a value on their own lines', () => {
     expect(atrium(['report', 'summary', 'migrating auth'], state).requests).toEqual([
       'report\nsummary\nmigrating auth\n',
@@ -211,6 +224,7 @@ describe('the atrium command', () => {
     const help = atrium(['--help'], state).out;
     expect(help).toContain('atrium open');
     expect(help).toContain('atrium report');
+    expect(help).toContain('atrium diff');
     expect(existsSync(join(state, 'requests'))).toBe(false);
   });
 });

@@ -107,7 +107,7 @@ version is in the list below, where an idea with no date belongs.
   for when you want the isolation. Optional, never automatic.
 - Windows port (forces the abstraction honest — do it before Linux).
 - Linux port (mostly free once Windows is done).
-- Diff review pane per session, as a third tab kind.
+- ~~Diff review pane per session, as a third tab kind.~~ Built as the changes tab; see `15-file-viewer.md`, stage 9.
 - Command palette (⌘K is already reserved in the title bar).
 - Persist layout across reloads.
 - Real `<webview>` browser tabs once Electron lands, replacing the iframe.

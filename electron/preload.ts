@@ -98,6 +98,12 @@ const bridge = {
       ipcRenderer.invoke('files:open-externally', path),
   },
 
+  git: {
+    status: (dir: string): Promise<unknown> => ipcRenderer.invoke('git:status', dir),
+    original: (root: string, path: string): Promise<unknown> =>
+      ipcRenderer.invoke('git:original', root, path),
+  },
+
   notify: {
     post: (notice: { title: string; body: string; tag: string }): Promise<void> =>
       ipcRenderer.invoke('notify:post', notice),

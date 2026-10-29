@@ -14,6 +14,7 @@ import { PaneTree } from './components/PaneTree';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
+import { useDiffStats } from './diffStats';
 import { useFileChangeMarks } from './fileMarks';
 import { requestFocus, type FocusRequest } from './focusRequest';
 import type { FileTarget, Session, TabKind } from './session/types';
@@ -149,6 +150,26 @@ function Workspace() {
 
   useTerminalAlerts(windowFocused, revealTab);
   useFileChangeMarks(sessions, focusedTabId);
+  useDiffStats(sessions, windowFocused);
+
+  /**
+   * Open what a session changed, beside the pane you are in — the agent that
+   * made the changes stays in view. From the rail, the session is entered
+   * first; its directory is the repository asked about.
+   */
+  const showChanges = useCallback(
+    (sessionId: string, root?: string) => {
+      const session = sessions.find((s) => s.id === sessionId);
+      if (!session || !host.capabilities.git) return;
+      const groupId =
+        session.id === active?.id && targetGroupId ? targetGroupId : Object.keys(session.groups)[0];
+      if (!groupId) return;
+      setActiveId(session.id);
+      setActiveGroupId(groupId);
+      driver.openChangesBeside(session.id, groupId, root ?? session.cwd);
+    },
+    [host, driver, sessions, active, targetGroupId],
+  );
 
   const addTab = useCallback(
     (kind: TabKind) => {
@@ -319,6 +340,14 @@ function Workspace() {
         if (active && tabId) driver.closeTab(active.id, tabId);
       },
       'settings.open': () => setSettingsOpen(true),
+      // The repository the pane you are in is working in, which is where the
+      // agent's shell has gone, not necessarily where the session began.
+      'changes.show': () => {
+        if (!active) return;
+        const tabId = targetGroupId ? active.groups[targetGroupId]?.activeTabId : null;
+        const tab = tabId ? active.tabs[tabId] : null;
+        showChanges(active.id, tab?.kind === 'terminal' ? tab.cwd : undefined);
+      },
     };
 
     const onKey = (event: KeyboardEvent) => {
@@ -329,7 +358,7 @@ function Workspace() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [createSession, addTab, openFileTab, driver, active, targetGroupId]);
+  }, [createSession, addTab, openFileTab, showChanges, driver, active, targetGroupId]);
 
   return (
     <DragProvider onDrop={handleDrop}>
@@ -353,6 +382,7 @@ function Workspace() {
             onBeginRename={setRenamingId}
             onRename={renameSession}
             onCancelRename={finishRename}
+            onShowChanges={showChanges}
           />
           {/* Double-clicking the empty workspace opens a session — the same
               gesture as an empty desktop or a browser's tab strip. */}

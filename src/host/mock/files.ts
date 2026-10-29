@@ -243,6 +243,11 @@ export class MockFiles implements FileDriver {
     // Nowhere to open it in a browser tab.
   }
 
+  /** Every file and what it says, for the mock's git to compare. */
+  entries(): [string, string][] {
+    return [...this.files];
+  }
+
   private emit(path: string, event: FileEvent): void {
     for (const handler of this.listeners.get(path) ?? []) handler(event);
   }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveLoginEnv } from './env';
 import { FileWatchers, expandHome, listDirectory, readContents, statPath } from './files';
+import { gitOriginal, gitRunner, gitStatus } from './git';
 import { menuTemplate } from './menu';
 import { PtyManager } from './pty';
 import { RequestWatcher } from './requests';
@@ -306,6 +307,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:open-externally', async (_e, p: string) => {
     await shell.openPath(expandHome(p, homeDir));
   });
+
+  // What changed against HEAD, for the changes tab. With the login shell's
+  // PATH, since a Finder launch would not find a Homebrew git.
+  const git = gitRunner(env);
+  ipcMain.handle('git:status', (_e, dir: string) => gitStatus(expandHome(dir, homeDir), git));
+  ipcMain.handle('git:original', (_e, root: string, p: string) =>
+    gitOriginal(expandHome(root, homeDir), expandHome(p, homeDir), git),
+  );
 
   /**
    * The latest notification from each tab, held so it can still be clicked.

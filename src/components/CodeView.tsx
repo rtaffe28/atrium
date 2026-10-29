@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BOLD, canHighlight, highlight, ITALIC, UNDERLINE, type TokenSpan } from '../viewers/highlight';
+import { canHighlight, highlight, styleOf, type TokenSpan } from '../viewers/highlight';
 
 interface Props {
   text: string;
@@ -14,18 +14,6 @@ function splitLines(text: string): string[] {
   const lines = text.split('\n');
   if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
   return lines;
-}
-
-function styleOf(token: TokenSpan): React.CSSProperties | undefined {
-  if (!token.color && !token.style) return undefined;
-  const style: React.CSSProperties = {};
-  if (token.color) style.color = token.color;
-  if (token.style) {
-    if (token.style & ITALIC) style.fontStyle = 'italic';
-    if (token.style & BOLD) style.fontWeight = 600;
-    if (token.style & UNDERLINE) style.textDecoration = 'underline';
-  }
-  return style;
 }
 
 /**

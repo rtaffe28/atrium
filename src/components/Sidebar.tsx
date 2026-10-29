@@ -33,6 +33,8 @@ interface Props {
   onBeginRename: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onCancelRename: () => void;
+  /** The +/− was clicked: show what the session changed. */
+  onShowChanges: (id: string) => void;
 }
 
 /**
@@ -111,6 +113,7 @@ export function Sidebar({
   onBeginRename,
   onRename,
   onCancelRename,
+  onShowChanges,
 }: Props) {
   const { begin, register, action, payload } = useDrag();
   const host = useHost();
@@ -312,13 +315,24 @@ export function Sidebar({
                     <span>{relativeTime(session.createdAt)}</span>
                   </span>
                   {session.diff.files > 0 && (
-                    <span className="session-diff">
+                    // Not dragged and not a rename: a click opens the changes.
+                    <button
+                      type="button"
+                      className="session-diff"
+                      title="Show changes"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onShowChanges(session.id);
+                      }}
+                    >
                       <span className="added">+{session.diff.added}</span>
                       <span className="removed">−{session.diff.removed}</span>
                       <span className="files">
                         {session.diff.files} file{session.diff.files === 1 ? '' : 's'}
                       </span>
-                    </span>
+                    </button>
                   )}
                 </span>
                 {working && <span className="working-tag">Working</span>}

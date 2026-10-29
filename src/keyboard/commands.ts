@@ -17,6 +17,7 @@ export type CommandId =
   | 'tab.close'
   | 'file.open'
   | 'folder.open'
+  | 'changes.show'
   | 'settings.open';
 
 export interface Command {
@@ -37,6 +38,8 @@ export const COMMANDS: Command[] = [
   { id: 'tab.close', label: 'Close tab', keys: 'Mod+W', group: 'Tabs' },
   { id: 'file.open', label: 'Open…', keys: 'Mod+O', group: 'Tabs' },
   { id: 'folder.open', label: 'Open folder…', keys: 'Mod+Shift+O', group: 'Tabs' },
+  // VS Code's key for Source Control, and shifted, so not Ctrl+G in a shell.
+  { id: 'changes.show', label: 'Show changes', keys: 'Mod+Shift+G', group: 'Tabs' },
   { id: 'settings.open', label: 'Settings', keys: 'Mod+,', group: 'Application' },
 ];
 

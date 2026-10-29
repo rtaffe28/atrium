@@ -48,6 +48,8 @@ export interface Capabilities {
   persistence: boolean;
   /** Reading files and folders on this machine, and watching them change. */
   files: boolean;
+  /** Asking git what changed in a working tree, and what a file was at HEAD. */
+  git: boolean;
 }
 
 // ── surfaces ───────────────────────────────────────────────────────────────
@@ -167,6 +169,55 @@ export interface FileDriver {
   openExternally(path: string): Promise<void>;
 }
 
+// ── git ────────────────────────────────────────────────────────────────────
+
+/**
+ * How a file differs from HEAD. `untracked` is new and not yet added; `added`
+ * is new and staged. Both read as new to someone reviewing.
+ */
+export type ChangeKind = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked';
+
+export interface GitChange {
+  /** Absolute. For a deleted file, where it was. */
+  path: string;
+  /** A rename's old path, absolute. */
+  oldPath?: string;
+  kind: ChangeKind;
+  /** Lines added and removed against HEAD; both 0 for a binary file. */
+  added: number;
+  removed: number;
+  binary: boolean;
+}
+
+/** A working tree compared with HEAD, staged and unstaged alike. */
+export interface GitStatus {
+  /** The repository's top level, absolute. */
+  root: string;
+  /** The checked-out branch, or null on a detached HEAD. */
+  branch: string | null;
+  /** Ordered by path. */
+  changes: GitChange[];
+  /** More changed than the host would list; `changes` is the first part. */
+  truncated: boolean;
+}
+
+/**
+ * The working tree against its last commit, for reviewing what an agent did.
+ *
+ * Read-only, like files: nothing here stages, commits or reverts. The
+ * comparison is HEAD against the files on disk — staged or not is a
+ * distinction for the person committing, not for the one reading.
+ */
+export interface GitDriver {
+  /** What changed in the repository holding `dir`; null if it is not in one. */
+  status(dir: string): Promise<GitStatus | null>;
+  /**
+   * The file as HEAD has it, read as files.read reads; null if HEAD has no
+   * such file. `path` is absolute and inside `root`.
+   */
+  original(root: string, path: string): Promise<FileContents | null>;
+}
+
 // ── notifications ──────────────────────────────────────────────────────────
 
 /**
@@ -264,6 +315,7 @@ export interface Host {
   readonly sessions: SessionDriver;
   readonly surfaces: SurfaceDriver;
   readonly files: FileDriver;
+  readonly git: GitDriver;
   readonly notify: NotifyDriver;
   readonly window: WindowDriver;
   readonly workspace: WorkspaceDriver;

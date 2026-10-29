@@ -12,6 +12,7 @@ import type {
 } from '../types';
 import type { AtriumBridge, HostInfo } from './bridge';
 import { ElectronFiles } from './files';
+import { ElectronGit } from './git';
 import { ElectronSessionDriver, type RestoreInput } from './session';
 import { WebviewSurfaces } from './surfaces';
 
@@ -101,6 +102,7 @@ export class ElectronHost implements Host {
   readonly sessions: ElectronSessionDriver;
   readonly surfaces: WebviewSurfaces;
   readonly files: ElectronFiles;
+  readonly git: ElectronGit;
   readonly notify: NativeNotify;
   readonly window: ElectronWindowDriver;
   readonly workspace: FileWorkspace;
@@ -111,6 +113,7 @@ export class ElectronHost implements Host {
     this.surfaces = new WebviewSurfaces(bridge);
     this.workspace = new FileWorkspace(bridge);
     this.files = new ElectronFiles(bridge);
+    this.git = new ElectronGit(bridge);
     this.notify = new NativeNotify(bridge);
     this.window = new ElectronWindowDriver(bridge, info);
     this.capabilities = {
@@ -122,6 +125,7 @@ export class ElectronHost implements Host {
       customChrome: true,
       persistence: true,
       files: true,
+      git: true,
     };
   }
 }

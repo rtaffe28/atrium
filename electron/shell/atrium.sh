@@ -13,6 +13,9 @@ atrium — ask the Atrium window this terminal is in to show something
 
   atrium open <path | url>     show a file or folder in a tab beside this one,
                                or an http(s) URL in a browser tab
+  atrium diff [path]           show what changed against HEAD in the repository
+                               here, beside this tab — for review when you are
+                               done; a file path opens on that file
   atrium report <key> <value>  say something about this session, for the rail
                                to show — e.g. report summary "migrating auth"
 
@@ -47,6 +50,18 @@ case "$verb" in
       /*) ;;               # absolute already
       '~'|'~/'*) ;;        # the app expands ~
       *) arg="$PWD/$arg" ;; # relative to where the command ran
+    esac
+    ;;
+  diff)
+    if [ $# -gt 1 ]; then
+      echo "atrium: diff takes at most one path" >&2
+      exit 2
+    fi
+    arg="${1:-$PWD}"
+    case "$arg" in
+      /*) ;;
+      '~'|'~/'*) ;;
+      *) arg="$PWD/$arg" ;;
     esac
     ;;
   report)
