@@ -1,6 +1,7 @@
-import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm';
+import type { ILink, ILinkProvider } from '@xterm/xterm';
 import type { FileStat } from '../host/types';
 import { resolveAgainst } from '../paths';
+import { logicalLineAt, rangeOf, touchesRow, type RowSource } from './logicalLine';
 
 /**
  * Paths in terminal output, as links.
@@ -77,7 +78,12 @@ export interface PathLinkOptions {
 /** How long a stat answer is trusted; a file an agent creates is a link soon after. */
 const CACHE_MS = 3000;
 
-export function pathLinkProvider(term: Terminal, options: PathLinkOptions): ILinkProvider {
+/**
+ * Path links for the row xterm asks about, read from the logical line it is
+ * part of, so a path an agent's output wrapped onto the next row is one link.
+ * `rows` is the terminal's buffer, read fresh each time.
+ */
+export function pathLinkProvider(rows: () => RowSource, options: PathLinkOptions): ILinkProvider {
   const cache = new Map<string, { at: number; stat: Promise<FileStat | null> }>();
   const lookup = (path: string) => {
     const now = Date.now();
@@ -91,9 +97,9 @@ export function pathLinkProvider(term: Terminal, options: PathLinkOptions): ILin
 
   return {
     provideLinks(y, callback) {
-      const row = term.buffer.active.getLine(y - 1);
-      const text = row?.translateToString(true) ?? '';
-      const candidates = findPathCandidates(text);
+      const line = logicalLineAt(rows(), y - 1);
+      const text = line.text;
+      const candidates = findPathCandidates(text).filter((c) => touchesRow(line, c.start, c.end, y));
       if (candidates.length === 0) {
         callback(undefined);
         return;
@@ -105,7 +111,7 @@ export function pathLinkProvider(term: Terminal, options: PathLinkOptions): ILin
           const info = await lookup(path);
           if (!info || info.kind === 'other') return null;
           return {
-            range: { start: { x: candidate.start + 1, y }, end: { x: candidate.end, y } },
+            range: rangeOf(line, candidate.start, candidate.end),
             text: text.slice(candidate.start, candidate.end),
             activate: (event) =>
               options.activate(event, path, candidate.line, info.kind === 'directory'),
