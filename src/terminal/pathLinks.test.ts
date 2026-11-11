@@ -1,7 +1,9 @@
-import type { ILink, Terminal } from '@xterm/xterm';
+import type { ILink } from '@xterm/xterm';
 import { describe, expect, it, vi } from 'vitest';
 import type { FileStat } from '../host/types';
+import type { RowSource } from './logicalLine';
 import { fileUrlPath, findPathCandidates, pathLinkProvider } from './pathLinks';
+import { screen } from './rows.testing';
 
 const texts = (line: string) => findPathCandidates(line).map((c) => c.text);
 
@@ -46,23 +48,20 @@ describe('fileUrlPath', () => {
 });
 
 describe('pathLinkProvider', () => {
-  const termWith = (line: string) =>
-    ({
-      buffer: { active: { getLine: () => ({ translateToString: () => line }) } },
-    }) as unknown as Terminal;
+  const termWith = (line: string) => screen(80, [line]);
 
   const existing: Record<string, FileStat> = {
     '~/repo/src/a.ts': { kind: 'file', size: 1, mtime: 0 },
     '~/repo/src': { kind: 'directory', size: 0, mtime: 0 },
   };
 
-  const provide = (term: Terminal, activate = vi.fn()) =>
+  const provide = (rows: RowSource, activate = vi.fn(), y = 1) =>
     new Promise<ILink[] | undefined>((resolve) =>
-      pathLinkProvider(term, {
+      pathLinkProvider(() => rows, {
         cwd: () => '~/repo',
         stat: async (path) => existing[path] ?? null,
         activate,
-      }).provideLinks(1, resolve),
+      }).provideLinks(y, resolve),
     );
 
   it('links what exists, resolved against the shell’s directory, and nothing else', async () => {
@@ -84,6 +83,16 @@ describe('pathLinkProvider', () => {
     expect(activate).toHaveBeenLastCalledWith(expect.anything(), '~/repo/src', undefined, true);
     links?.[1].activate(new MouseEvent('click'), 'src/a.ts:7');
     expect(activate).toHaveBeenLastCalledWith(expect.anything(), '~/repo/src/a.ts', 7, false);
+  });
+
+  it('follows a path an agent wrapped onto the next row, from either row', async () => {
+    // As Claude Code prints it: the first row runs to the edge, the rest is indented under it.
+    const rows = screen(16, ['⏺ see ~/repo/sr', '  c/a.ts there']);
+    for (const y of [1, 2]) {
+      const links = await provide(rows, vi.fn(), y);
+      expect(links?.map((link) => link.text)).toEqual(['~/repo/src/a.ts']);
+      expect(links?.[0].range).toEqual({ start: { x: 7, y: 1 }, end: { x: 8, y: 2 } });
+    }
   });
 
   it('offers nothing for a line with no paths', async () => {

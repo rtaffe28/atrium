@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { claimFocus, type FocusRequest } from '../focusRequest';
@@ -11,7 +10,9 @@ import { isResizing, onSettled } from '../layout/settle';
 import { isOpenLinkClick } from '../links';
 import { useSettings } from '../settings/context';
 import type { FileTarget, SessionDriver } from '../session/types';
+import { bufferRows } from '../terminal/logicalLine';
 import { fileUrlPath, pathLinkProvider } from '../terminal/pathLinks';
+import { urlLinkProvider } from '../terminal/urlLinks';
 
 const THEME = {
   background: '#0d0f12',
@@ -118,13 +119,16 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink, onOpenFi
 
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon(follow));
+    // URLs and paths are read across rows, so one an agent wrapped onto the
+    // next row is still one link; see terminal/logicalLine.ts.
+    const rows = () => bufferRows(term.buffer.active, term.cols);
+    const urlLinks = term.registerLinkProvider(urlLinkProvider(rows, follow));
     // Paths, with the same click and the same split as links; see
     // terminal/pathLinks.ts. Only where the host can say whether a path
     // exists, since every word with a dot in it is a candidate.
     const pathLinks = canReadFiles
       ? term.registerLinkProvider(
-          pathLinkProvider(term, {
+          pathLinkProvider(rows, {
             cwd: () => cwdRef.current ?? '~',
             stat: (path) => files.stat(path),
             activate: (event, path, line, directory) => {
@@ -242,6 +246,7 @@ export function TerminalView({ tabId, driver, focusRequest, onOpenLink, onOpenFi
       host.removeEventListener('drop', dropped);
       typed.dispose();
       detach();
+      urlLinks.dispose();
       pathLinks?.dispose();
       term.dispose();
       termRef.current = null;
